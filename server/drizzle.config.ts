@@ -1,18 +1,14 @@
-import { config } from "dotenv";
-import { defineConfig } from "drizzle-kit";
-import { fileURLToPath } from "node:url";
+import { config } from 'dotenv';
+import { defineConfig } from 'drizzle-kit';
 
-config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
-
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL must be set to run Drizzle Kit.");
-}
+config({ path: '.env' });
 
 export default defineConfig({
-  dialect: "cockroach",
+  schema: './src/db/schema.ts',
+  out: './migrations',
+  dialect: 'turso',
   dbCredentials: {
-    url: databaseUrl,
+    url: process.env.TURSO_CONNECTION_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN!,
   },
 });

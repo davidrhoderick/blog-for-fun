@@ -1,10 +1,9 @@
-import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/cockroach';
+import { config } from 'dotenv';
+import { drizzle } from 'drizzle-orm/libsql';
 
-// You can specify any property from the node-postgres connection options
-const db = drizzle({ 
-  connection: { 
-    connectionString: process.env.DATABASE_URL!,
-    ssl: true
-  }
-});
+config({ path: '.env' }); // or .env.local
+
+export const db = drizzle({ connection: {
+  url: process.env.TURSO_CONNECTION_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+}});

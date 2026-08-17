@@ -7,24 +7,23 @@
     "dev:codegen": "npx graphql-codegen",
     "dev:server": "tsx src/server.ts --watch",
     "dev": "pnpm run dev:codegen && pnpm run dev:server",
-    "db:studio": "drizzle-kit studio --config drizzle.studio.config.ts"
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "dotenv": "^17.4.2",
     "drizzle-orm": "1.0.0-rc.4",
-    "graphql": "^17.0.2",
-    "graphql-yoga": "^5.21.2",
-    "pg": "^8.23.0"
+    "graphql": "^16.0.0",
+    "graphql-yoga": "^5.21.2"
   },
   "devDependencies": {
     "@eddeee888/gcg-typescript-resolver-files": "^0.17.0",
     "@graphql-codegen/cli": "^7.2.0",
     "@types/node": "^22.20.1",
-    "@types/pg": "^8.21.0",
     "drizzle-kit": "1.0.0-rc.4",
     "tsx": "^4.23.9"
   }
