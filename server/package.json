@@ -7,6 +7,9 @@
     "dev:codegen": "npx graphql-codegen",
     "dev:server": "tsx src/server.ts --watch",
     "dev": "pnpm run dev:codegen && pnpm run dev:server",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:check": "drizzle-kit check --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts"
   },
   "keywords": [],
