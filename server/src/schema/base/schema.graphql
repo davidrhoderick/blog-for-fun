@@ -1,3 +1,6 @@
-type Query {
-	hello: String
+"""
+A normalized object that can be addressed by its globally unique ID.
+"""
+interface Entity {
+	id: ID!
 }
