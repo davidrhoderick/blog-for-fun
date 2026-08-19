@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "e4e08646-806f-4b65-9d1d-181b94d37e94",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "post_revisions",
@@ -135,13 +133,9 @@
       "table": "posts"
     },
     {
-      "columns": [
-        "post_id"
-      ],
+      "columns": ["post_id"],
       "tableTo": "posts",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -150,18 +144,14 @@
       "table": "post_revisions"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "post_revisions_pk",
       "table": "post_revisions",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "posts_pk",
       "table": "posts",

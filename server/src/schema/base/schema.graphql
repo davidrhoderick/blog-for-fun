@@ -2,5 +2,5 @@
 A normalized object that can be addressed by its globally unique ID.
 """
 interface Entity {
-	id: ID!
+  id: ID!
 }

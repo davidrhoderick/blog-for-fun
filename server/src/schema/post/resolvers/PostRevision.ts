@@ -1,3 +1,3 @@
-import type { PostRevisionResolvers } from "./../../types.generated";
+import type { PostRevisionResolvers } from './../../types.generated'
 
-export const PostRevision: PostRevisionResolvers = {};
+export const PostRevision: PostRevisionResolvers = {}

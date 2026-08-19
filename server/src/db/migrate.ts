@@ -1,4 +1,4 @@
-import { migrate } from 'drizzle-orm/libsql/migrator';
-import { db } from './index';
+import { migrate } from 'drizzle-orm/libsql/migrator'
+import { db } from './index'
 
-await migrate(db, { migrationsFolder: './migrations' });
+await migrate(db, { migrationsFolder: './migrations' })

@@ -1,1 +1,1 @@
-export { getPost, getPostBySlug, getPosts, toPost } from "./service";
+export { getPost, getPostBySlug, getPosts, toPost } from './service'

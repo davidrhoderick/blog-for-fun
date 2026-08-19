@@ -1,1 +1,1 @@
-export { getPostRevision, getPostRevisions } from "./service";
+export { getPostRevision, getPostRevisions } from './service'

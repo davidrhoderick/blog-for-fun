@@ -1,25 +1,25 @@
 type Query {
-	post(id: ID!): Post
-	postBySlug(slug: String!): Post
-	posts: [Post!]!
-	postRevision(id: ID!): PostRevision
+  post(id: ID!): Post
+  postBySlug(slug: String!): Post
+  posts: [Post!]!
+  postRevision(id: ID!): PostRevision
 }
 
 type Post implements Entity {
-	id: ID!
-	slug: String!
-	title: String!
-	markdownContent: String!
-	createdAt: Int!
-	updatedAt: Int!
-	revisions: [PostRevision!]!
+  id: ID!
+  slug: String!
+  title: String!
+  markdownContent: String!
+  createdAt: Int!
+  updatedAt: Int!
+  revisions: [PostRevision!]!
 }
 
 type PostRevision implements Entity {
-	id: ID!
-	revisionNumber: Int!
-	title: String!
-	markdownContent: String!
-	createdAt: Int!
-	post: Post!
+  id: ID!
+  revisionNumber: Int!
+  title: String!
+  markdownContent: String!
+  createdAt: Int!
+  post: Post!
 }
