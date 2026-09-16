@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev:codegen": "npx graphql-codegen",
-    "dev:server": "tsx src/server.ts --watch",
-    "dev": "pnpm run dev:codegen && pnpm run dev:server",
+    "dev:codegen": "graphql-codegen",
+    "dev:codegen:watch": "graphql-codegen --watch",
+    "dev:server": "tsx watch src/server.ts",
+    "dev": "pnpm run dev:codegen && concurrently --kill-others-on-fail -n codegen,server \"pnpm run dev:codegen:watch\" \"pnpm run dev:server\"",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
@@ -27,7 +28,9 @@
   "devDependencies": {
     "@eddeee888/gcg-typescript-resolver-files": "^0.17.0",
     "@graphql-codegen/cli": "^7.2.0",
+    "@parcel/watcher": "^2.6.0",
     "@types/node": "^22.20.1",
+    "concurrently": "^10.0.5",
     "drizzle-kit": "1.0.0-rc.4",
     "tsx": "^4.23.9"
   }
