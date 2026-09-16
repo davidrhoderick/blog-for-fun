@@ -6,14 +6,15 @@ type Query {
 }
 
 type Mutation {
-  addPost(input: AddPostInput!): Post!
+  putPost(input: PutPostInput!): Post!
   deletePost(id: ID!): DeletedEntity
 }
 
-input AddPostInput {
-  slug: Slug!
-  title: NonEmptyString!
-  markdownContent: String!
+input PutPostInput {
+  id: ID
+  slug: Slug
+  title: NonEmptyString
+  markdownContent: String
 }
 
 type DeletedPost implements DeletedEntity {

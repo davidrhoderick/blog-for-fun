@@ -7,6 +7,9 @@ const config = {
       scalarsOverrides: {
         Slug: { type: 'string' },
       },
+      typesPluginsConfig: {
+        useTypeImports: true,
+      },
     }),
   },
 }

@@ -32,7 +32,7 @@ export const getPostRevisions = async (post: Post) => {
   const results = await db
     .select()
     .from(postRevisions)
-    .where(eq(postRevisions.postId, post.id))
+    .where(eq(postRevisions.postId, String(post.id)))
     .orderBy(asc(postRevisions.revisionNumber))
   return results.map((revision) => toPostRevision(revision, post))
 }
