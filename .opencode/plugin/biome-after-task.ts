@@ -1,11 +1,25 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { Plugin } from '@opencode-ai/plugin'
 
-const followUp = `Run the repository's Biome validation now. First run \`pnpm exec biome check .\` and inspect every diagnostic. Address each issue intentionally: understand whether it is caused by this task or is pre-existing, make the smallest correct fix for actionable issues, and explain any issue that should deliberately remain unresolved. Do not bypass diagnostics with suppressions, ignores, or weaker configuration unless that is the intended fix.
+const execFileAsync = promisify(execFile)
 
-Once the check is clean, run \`pnpm exec biome format --write .\`, then rerun \`pnpm exec biome check .\` to verify the final result. Report the commands, changes, and outcome.`
+const followUp = `Run \`pnpm exec biome check .\`. Fix every diagnostic intentionally, then run \`pnpm exec biome format --write .\` and rerun \`pnpm exec biome check .\`. Do not use suppressions, ignores, or weaker configuration to bypass diagnostics. Reply with exactly one concise sentence stating the final outcome; do not include headings, command lists, progress updates, or explanations.`
+
+const getWorktreeStatus = async (directory: string) => {
+  try {
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
+      cwd: directory,
+    })
+    return stdout
+  } catch {
+    return null
+  }
+}
 
 export default (async ({ client, directory }) => {
   const pendingSessions = new Set<string>()
+  const worktreeStatusBySession = new Map<string, string | null>()
 
   return {
     'chat.message': async (input, output) => {
@@ -14,6 +28,10 @@ export default (async ({ client, directory }) => {
       )
 
       if (!isFollowUp) {
+        worktreeStatusBySession.set(
+          input.sessionID,
+          await getWorktreeStatus(directory),
+        )
         pendingSessions.add(input.sessionID)
       }
     },
@@ -21,6 +39,20 @@ export default (async ({ client, directory }) => {
       if (
         event.type !== 'session.idle' ||
         !pendingSessions.delete(event.properties.sessionID)
+      ) {
+        return
+      }
+
+      const previousStatus = worktreeStatusBySession.get(
+        event.properties.sessionID,
+      )
+      worktreeStatusBySession.delete(event.properties.sessionID)
+      const currentStatus = await getWorktreeStatus(directory)
+
+      if (
+        previousStatus !== null &&
+        currentStatus !== null &&
+        previousStatus === currentStatus
       ) {
         return
       }
