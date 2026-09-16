@@ -1,25 +1,40 @@
 type Query {
   post(id: ID!): Post
-  postBySlug(slug: String!): Post
+  postBySlug(slug: Slug!): Post
   posts: [Post!]!
   postRevision(id: ID!): PostRevision
 }
 
+type Mutation {
+  addPost(input: AddPostInput!): Post!
+  deletePost(id: ID!): DeletedEntity
+}
+
+input AddPostInput {
+  slug: Slug!
+  title: NonEmptyString!
+  markdownContent: String!
+}
+
+type DeletedPost implements DeletedEntity {
+  id: ID!
+}
+
 type Post implements Entity {
   id: ID!
-  slug: String!
-  title: String!
+  slug: Slug!
+  title: NonEmptyString!
   markdownContent: String!
-  createdAt: Int!
-  updatedAt: Int!
+  createdAt: DateTimeISO!
+  updatedAt: DateTimeISO!
   revisions: [PostRevision!]!
 }
 
 type PostRevision implements Entity {
   id: ID!
   revisionNumber: Int!
-  title: String!
+  title: NonEmptyString!
   markdownContent: String!
-  createdAt: Int!
+  createdAt: DateTimeISO!
   post: Post!
 }

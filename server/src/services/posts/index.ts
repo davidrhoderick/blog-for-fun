@@ -1,1 +1,8 @@
-export { getPost, getPostBySlug, getPosts, toPost } from './service'
+export {
+  addPost,
+  deletePost,
+  getPost,
+  getPostBySlug,
+  getPosts,
+  toPost,
+} from './service'

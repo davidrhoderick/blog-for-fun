@@ -4,8 +4,6 @@ import { postRevisions } from '../../db/schema'
 import type { Post, PostRevision } from '../../schema/types.generated'
 import { getPost } from '../posts'
 
-const timestamp = (value: Date) => Math.floor(value.getTime() / 1000)
-
 const toPostRevision = (
   revision: typeof postRevisions.$inferSelect,
   post: Post,
@@ -14,7 +12,7 @@ const toPostRevision = (
   revisionNumber: revision.revisionNumber,
   title: revision.title,
   markdownContent: revision.markdownContent,
-  createdAt: timestamp(revision.createdAt),
+  createdAt: revision.createdAt,
   post,
 })
 
