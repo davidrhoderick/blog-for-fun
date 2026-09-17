@@ -1,42 +1,81 @@
 # Next steps
 
-## Current revision behavior
+## Authentication security roadmap
 
-- `posts` stores the current canonical version of each post.
-- `post_revisions` stores an append-only history of prior title and Markdown
-  values.
-- Creating a post does not create a revision.
-- Updating the title or Markdown saves the previous content as a revision before
-  updating the post.
-- Slug-only and no-op updates do not create revisions.
-- Slugs are not revisioned or restored.
-- Restoring a revision should use the normal update path so the current content
-  is preserved as a new revision before the historical content becomes current.
+The application-owned session boundary is implemented. The following security
+work remains, ordered by priority.
 
-## Direct revision query
+### High priority
 
-Expose revisions for a specific post without requiring the post selection path.
-The direct query should use the same connection and pagination implementation as
-`Post.revisions`, not duplicate query logic.
+- Add an explicit draft and publication model to posts, then filter every public
+  post query to published content. GraphQL middleware cannot provide this
+  boundary without publication state in the database and query layer.
+- Make GraphQL authorization fail closed for mutations through middleware, a
+  schema directive, or an explicit mutation policy registry. Require every
+  mutation to declare either a permission or an intentionally public policy;
+  reserve the public policy for operations such as login and idempotent logout.
+- Add a schema-level test that inventories all mutation fields and fails when a
+  mutation has no policy. Keep resolver permission checks where they provide
+  useful defense in depth.
+- Add structured mutation auditing at the GraphQL boundary. Record the actor,
+  operation, affected entity, outcome, and request correlation data without
+  storing request bodies, passwords, session tokens, or post content.
+- Add a tested administrator password-recovery command. It must validate a new
+  password, update `password_changed_at`, revoke every existing session, and
+  write an audit event. Document how access to this operational command is
+  restricted and recovered.
 
-Candidate API:
+### Persistent throttling
 
-```graphql
-type Query {
-  postRevisions(postId: ID!, first: Int, after: String): PostRevisionConnection!
-}
-```
+- Replace the process-local email attempt map with bounded database-backed
+  throttle state. Store mutable counters and `blocked_until` on one row per
+  existing authentication account; never create throttle rows for arbitrary
+  submitted email addresses. This bounds storage by the number of accounts and
+  avoids an attacker growing a table with invented identities.
+- Add a separate source-level control at the reverse proxy or application edge.
+  Per-account state alone permits deliberate administrator lockout, while
+  source-only state permits distributed password guessing. Do not trust client
+  forwarding headers unless the request came through a configured trusted
+  proxy.
+- Replace the current hard account lockout with escalating delays and a capped
+  `blocked_until`. Successful authentication should reset the mutable state.
+- Add tests for persistence across restarts, concurrent updates, bounded
+  storage, expiry, and behavior across multiple server instances.
 
-Decide whether revisions also need lookup by post slug. Prefer `postId` unless a
-real client requirement justifies another access path.
+### Audit retention
 
-## Authentication and authorization
+- Record authentication failures and throttle decisions without storing
+  passwords, session tokens, or raw submitted identifiers.
+- Do not append an unlimited audit row for every anonymous attempt. Aggregate
+  repetitive failures into fixed time buckets and apply both an age-based
+  retention window and a maximum retained-row policy.
+- Run periodic deletion in small batches and monitor database size. Security
+  events such as administrator bootstrap, account disablement, and successful
+  session creation should have a longer retention class than repetitive failed
+  logins.
 
-Research the authentication boundary before building the admin editing UI.
-Compare a hosted provider such as Clerk, a self-hosted option such as
-SuperTokens, and a small application-owned session implementation. Avoid
-choosing only from integration convenience; evaluate operational and security
-requirements.
+### Lower priority
+
+- Apply CSRF and origin checks through a shared React Router action wrapper so
+  future unsafe BFF actions cannot omit them. Add a GraphQL mutation origin
+  policy as defense in depth and configure trusted production origins
+  explicitly.
+- Validate `GRAPHQL_URL` and all other production-only settings during process
+  startup rather than waiting for the first request.
+- Schedule `deleteExpiredSessions` in bounded batches and monitor session-table
+  growth. Presented expired sessions should continue to be deleted immediately.
+- Design soft deletion or a separate retained archive before adding deleted-post
+  restoration. Current hard deletion cascades through revision history, so there
+  is no source from which to restore.
+
+### Stronger authentication
+
+- Evaluate TOTP or, preferably, WebAuthn/passkeys for the administrator. A
+  second factor reduces account takeover risk but does not replace throttling:
+  OTP verification can be guessed, and emailed/SMS OTP delivery can itself be
+  abused for cost and availability attacks.
+- Add recovery codes and a tested operational recovery procedure before making
+  a second factor mandatory.
 
 Required behavior:
 
@@ -53,18 +92,21 @@ Required behavior:
 - The design includes session revocation, expiration, key rotation, password or
   identity-provider recovery, and administrator bootstrap procedures.
 
-Implementation sequence:
+Continue using established password hashing, session, CSRF, and cookie libraries
+rather than implementing cryptographic primitives directly.
 
-1. Write a short decision record comparing the viable providers and an owned
-   implementation.
-2. Define the authenticated user and administrator authorization model.
-3. Add request context or GraphQL Yoga middleware that resolves the session.
-4. Add a reusable authorization guard for protected resolvers.
-5. Protect all existing post mutations before connecting the admin UI.
-6. Add integration tests proving anonymous reads work and anonymous mutations
-   fail.
-7. Build the admin login and session-expiration experience.
+## Set up CI/CD to run tests
 
-Do not implement custom password authentication casually. If an owned session
-layer is selected, use established password hashing, session, CSRF, and cookie
-libraries rather than implementing cryptographic primitives directly.
+We want tp run tests in GitHub.
+
+Let's also see about running a review agent depending on cost.  We care about semantic coding styles so we can review PRs more easily.
+
+## Set up the admin UI
+
+We want to be able to log in and log out as well as CRUD posts.  This should be a client-side SPA with no SSR.
+
+## Set up the public facing app
+
+This should be SSR driven apollo client hydrating client-side where necessary (deferred loading) for high performance.
+
+Start without worrying about styling.  Add it later.  Use something like `@apply` for it with tailwind.
