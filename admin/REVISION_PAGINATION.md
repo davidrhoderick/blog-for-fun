@@ -1,8 +1,10 @@
 # Revision Pagination
 
-`Post.revisions` is a cursor-paginated connection. Revisions are returned by
-descending revision number, so the first page contains the newest revisions and
-each subsequent page moves toward older revisions.
+`Query.postRevisions` and `Post.revisions` expose the same cursor-paginated
+connection. Use `postRevisions` when the post ID is already known and the post
+itself does not need to be selected. Revisions are returned by descending
+revision number, so the first page contains the newest revisions and each
+subsequent page moves toward older revisions.
 
 ## Connection Shape
 
@@ -45,22 +47,19 @@ the maximum number of revisions returned. Omit `after` for the newest page.
 
 ```graphql
 query PostRevisions($postId: ID!, $first: Int, $after: String) {
-  post(id: $postId) {
-    id
-    revisions(first: $first, after: $after) {
-      nodes {
-        id
-        revisionNumber
-        title
-        markdownContent
-        createdAt
-      }
-      pageInfo {
-        hasNextPage
-        hasPreviousPage
-        startCursor
-        endCursor
-      }
+  postRevisions(postId: $postId, first: $first, after: $after) {
+    nodes {
+      id
+      revisionNumber
+      title
+      markdownContent
+      createdAt
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
     }
   }
 }
@@ -81,31 +80,28 @@ A response has this shape:
 ```json
 {
   "data": {
-    "post": {
-      "id": "the-post-id",
-      "revisions": {
-        "nodes": [
-          {
-            "id": "revision-105",
-            "revisionNumber": 105,
-            "title": "Current title",
-            "markdownContent": "Previous content",
-            "createdAt": "2026-09-17T12:00:00.000Z"
-          },
-          {
-            "id": "revision-104",
-            "revisionNumber": 104,
-            "title": "Previous title",
-            "markdownContent": "Earlier content",
-            "createdAt": "2026-09-16T12:00:00.000Z"
-          }
-        ],
-        "pageInfo": {
-          "hasNextPage": true,
-          "hasPreviousPage": false,
-          "startCursor": "cursor-for-revision-105",
-          "endCursor": "cursor-for-revision-104"
+    "postRevisions": {
+      "nodes": [
+        {
+          "id": "revision-105",
+          "revisionNumber": 105,
+          "title": "Current title",
+          "markdownContent": "Previous content",
+          "createdAt": "2026-09-17T12:00:00.000Z"
+        },
+        {
+          "id": "revision-104",
+          "revisionNumber": 104,
+          "title": "Previous title",
+          "markdownContent": "Earlier content",
+          "createdAt": "2026-09-16T12:00:00.000Z"
         }
+      ],
+      "pageInfo": {
+        "hasNextPage": true,
+        "hasPreviousPage": false,
+        "startCursor": "cursor-for-revision-105",
+        "endCursor": "cursor-for-revision-104"
       }
     }
   }
@@ -200,19 +196,16 @@ import type { Route } from './+types/post-revisions'
 
 const POST_REVISIONS_QUERY = `
   query PostRevisions($postId: ID!, $first: Int, $after: String) {
-    post(id: $postId) {
-      id
-      revisions(first: $first, after: $after) {
-        nodes {
-          id
-          revisionNumber
-          title
-          createdAt
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
+    postRevisions(postId: $postId, first: $first, after: $after) {
+      nodes {
+        id
+        revisionNumber
+        title
+        createdAt
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -235,10 +228,7 @@ type RevisionConnection = {
 
 type QueryResponse = {
   data?: {
-    post: {
-      id: string
-      revisions: RevisionConnection
-    } | null
+    postRevisions: RevisionConnection
   }
   errors?: Array<{ message: string }>
 }
@@ -265,11 +255,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       status: 502,
     })
   }
-  if (!result.data?.post) {
-    throw new Response('Post not found', { status: 404 })
+  if (!result.data) {
+    throw new Response('GraphQL response had no data', { status: 502 })
   }
 
-  return result.data.post.revisions
+  return result.data.postRevisions
 }
 
 export default function PostRevisions({ loaderData }: Route.ComponentProps) {

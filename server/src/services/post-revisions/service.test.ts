@@ -15,6 +15,14 @@ const { db } = await import('../../db')
 const { getPost } = await import('../posts')
 const { MAX_PAGE_SIZE } = await import('./pagination')
 const { getPostRevisions } = await import('./service')
+const { postRevisions: resolvePostRevisions } = await import(
+  '../../schema/post/resolvers/Query/postRevisions'
+)
+
+const callPostRevisionsResolver = resolvePostRevisions as unknown as (
+  parent: unknown,
+  args: { postId: string; first?: number | null; after?: string | null },
+) => ReturnType<typeof getPostRevisions>
 
 const migrationsFolder = fileURLToPath(
   new URL('../../../migrations', import.meta.url),
@@ -106,6 +114,26 @@ test('returns a subsequent revision page', async () => {
   )
   assert.equal(secondPage.pageInfo.hasNextPage, true)
   assert.equal(secondPage.pageInfo.hasPreviousPage, true)
+})
+
+test('root query resolver delegates to the revision connection', async () => {
+  const connection = await callPostRevisionsResolver(null, {
+    postId: 'post-with-revisions',
+    first: 2,
+  })
+
+  assert.deepEqual(
+    connection.nodes.map(({ revisionNumber }) => revisionNumber),
+    [5, 4],
+  )
+  assert.equal(connection.pageInfo.hasNextPage, true)
+})
+
+test('root query resolver rejects a missing post', async () => {
+  await assert.rejects(
+    callPostRevisionsResolver(null, { postId: 'missing-post' }),
+    { message: 'Post not found' },
+  )
 })
 
 test('rejects invalid and cross-post cursors', async () => {

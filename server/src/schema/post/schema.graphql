@@ -3,6 +3,20 @@ type Query {
   postBySlug(slug: Slug!): Post
   posts: [Post!]!
   postRevision(id: ID!): PostRevision
+  """
+  Revisions for a post, ordered by descending revision number, newest first.
+  """
+  postRevisions(
+    postId: ID!
+    """
+    The number of revisions to return. Defaults to 20 and must be between 0 and 100.
+    """
+    first: Int
+    """
+    Return revisions after the cursor from a previous page's `pageInfo.endCursor`.
+    """
+    after: String
+  ): PostRevisionConnection!
 }
 
 type Mutation {

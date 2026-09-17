@@ -13,21 +13,6 @@
 - Restoring a revision should use the normal update path so the current content
   is preserved as a new revision before the historical content becomes current.
 
-## Revision pagination
-
-Replace the unbounded `Post.revisions` list with paginated access. Prefer a
-Relay-style connection if the same pagination model will be reused elsewhere:
-
-- Add stable cursor pagination ordered by revision number.
-- Support `first` and `after` initially; add reverse pagination only when a UI
-  requires it.
-- Return `edges`, `nodes`, and `pageInfo` rather than every revision.
-- Set and enforce a reasonable maximum page size.
-- Keep ordering deterministic, using revision number and ID if a tie-breaker is
-  needed.
-- Add tests for the first page, subsequent pages, invalid cursors, empty
-  results, and page-size limits.
-
 ## Direct revision query
 
 Expose revisions for a specific post without requiring the post selection path.
