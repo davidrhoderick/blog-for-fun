@@ -8,6 +8,7 @@ const config = {
         Slug: { type: 'string' },
       },
       typesPluginsConfig: {
+        contextType: '../auth/context#AuthContext',
         useTypeImports: true,
       },
     }),

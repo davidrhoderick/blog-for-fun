@@ -12,14 +12,18 @@
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
-    "db:studio": "drizzle-kit studio --config drizzle.config.ts"
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts",
+    "auth:bootstrap": "tsx src/scripts/bootstrap-auth.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@inquirer/prompts": "^8.7.2",
     "@libsql/client": "^0.17.4",
+    "@node-rs/argon2": "^2.2.1",
+    "cookie": "^2.0.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "1.0.0-rc.4",
     "graphql": "^16.0.0",

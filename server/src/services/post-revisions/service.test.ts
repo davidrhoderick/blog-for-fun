@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/libsql/migrator'
+import type { AuthContext } from '../../auth/context'
 import { postRevisions, posts } from '../../db/schema'
 
 const tempDirectory = await mkdtemp(join(tmpdir(), 'blog-revision-test-'))
@@ -22,7 +23,21 @@ const { postRevisions: resolvePostRevisions } = await import(
 const callPostRevisionsResolver = resolvePostRevisions as unknown as (
   parent: unknown,
   args: { postId: string; first?: number | null; after?: string | null },
+  context: AuthContext,
 ) => ReturnType<typeof getPostRevisions>
+
+const administratorContext: AuthContext = {
+  request: new Request('http://localhost/graphql'),
+  responseHeaders: new Headers(),
+  sessionToken: null,
+  session: null,
+  principal: {
+    id: 'test-administrator',
+    email: 'admin@example.com',
+    displayName: 'Test Administrator',
+    roles: ['administrator'],
+  },
+}
 
 const migrationsFolder = fileURLToPath(
   new URL('../../../migrations', import.meta.url),
@@ -117,10 +132,14 @@ test('returns a subsequent revision page', async () => {
 })
 
 test('root query resolver delegates to the revision connection', async () => {
-  const connection = await callPostRevisionsResolver(null, {
-    postId: 'post-with-revisions',
-    first: 2,
-  })
+  const connection = await callPostRevisionsResolver(
+    null,
+    {
+      postId: 'post-with-revisions',
+      first: 2,
+    },
+    administratorContext,
+  )
 
   assert.deepEqual(
     connection.nodes.map(({ revisionNumber }) => revisionNumber),
@@ -131,7 +150,11 @@ test('root query resolver delegates to the revision connection', async () => {
 
 test('root query resolver rejects a missing post', async () => {
   await assert.rejects(
-    callPostRevisionsResolver(null, { postId: 'missing-post' }),
+    callPostRevisionsResolver(
+      null,
+      { postId: 'missing-post' },
+      administratorContext,
+    ),
     { message: 'Post not found' },
   )
 })

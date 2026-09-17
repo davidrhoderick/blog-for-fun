@@ -1,0 +1,24 @@
+type Query {
+  viewer: Viewer
+}
+
+type Mutation {
+  login(input: LoginInput!): Viewer!
+  logout: Boolean!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Viewer implements Entity {
+  id: ID!
+  displayName: NonEmptyString!
+  email: String!
+  roles: [Role!]!
+}
+
+enum Role {
+  ADMINISTRATOR
+}

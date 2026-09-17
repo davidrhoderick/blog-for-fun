@@ -1,4 +1,4 @@
-import { defineRelations, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import {
   index,
   integer,
@@ -50,16 +50,3 @@ export const postRevisions = sqliteTable(
     ),
   ],
 )
-
-export const relations = defineRelations({ posts, postRevisions }, (r) => ({
-  posts: {
-    revisions: r.many.postRevisions(),
-  },
-  postRevisions: {
-    post: r.one.posts({
-      from: r.postRevisions.postId,
-      to: r.posts.id,
-      optional: false,
-    }),
-  },
-}))
