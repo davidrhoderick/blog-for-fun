@@ -28,7 +28,37 @@ type Post implements Entity {
   markdownContent: String!
   createdAt: DateTimeISO!
   updatedAt: DateTimeISO!
-  revisions: [PostRevision!]!
+  """
+  Revisions ordered by descending revision number, newest first.
+  """
+  revisions(
+    """
+    The number of revisions to return. Defaults to 20 and must be between 0 and 100.
+    """
+    first: Int
+    """
+    Return revisions after the cursor from a previous page's `pageInfo.endCursor`.
+    """
+    after: String
+  ): PostRevisionConnection!
+}
+
+type PostRevisionConnection {
+  edges: [PostRevisionEdge!]!
+  nodes: [PostRevision!]!
+  pageInfo: PageInfo!
+}
+
+type PostRevisionEdge {
+  cursor: String!
+  node: PostRevision!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
 }
 
 type PostRevision implements Entity {

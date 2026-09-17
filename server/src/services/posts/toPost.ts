@@ -8,5 +8,14 @@ export const toPost = (post: typeof posts.$inferSelect): Post => ({
   markdownContent: post.markdownContent,
   createdAt: post.createdAt,
   updatedAt: post.updatedAt,
-  revisions: [],
+  revisions: {
+    edges: [],
+    nodes: [],
+    pageInfo: {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      startCursor: null,
+      endCursor: null,
+    },
+  },
 })
