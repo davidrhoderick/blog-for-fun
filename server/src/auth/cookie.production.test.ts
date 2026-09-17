@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-process.env.NODE_ENV = 'production'
+delete process.env.NODE_ENV
 
 const { SESSION_COOKIE_NAME, createBlankSessionCookie, createSessionCookie } =
   await import('./cookie')
 
-test('production cookies use the host prefix and secure attributes', () => {
+test('cookies are secure when the environment is not explicitly local', () => {
   const sessionCookie = createSessionCookie('token', {
     expiresAt: new Date(Date.now() + 60_000),
   })

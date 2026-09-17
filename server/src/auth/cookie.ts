@@ -1,9 +1,12 @@
 import { parseCookie, stringifySetCookie } from 'cookie'
 import type { AuthSession } from './types'
 
-const isProduction = process.env.NODE_ENV === 'production'
+// Cookies are secure by default; local HTTP development must opt out explicitly.
+const useSecureCookies = !['development', 'test'].includes(
+  process.env.NODE_ENV ?? '',
+)
 
-export const SESSION_COOKIE_NAME = isProduction
+export const SESSION_COOKIE_NAME = useSecureCookies
   ? '__Host-admin_session'
   : 'admin_session'
 
@@ -18,7 +21,7 @@ export const createSessionCookie = (
     name: SESSION_COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: isProduction,
+    secure: useSecureCookies,
     sameSite: 'lax',
     path: '/',
     expires: session.expiresAt,
@@ -33,7 +36,7 @@ export const createBlankSessionCookie = () =>
     name: SESSION_COOKIE_NAME,
     value: '',
     httpOnly: true,
-    secure: isProduction,
+    secure: useSecureCookies,
     sameSite: 'lax',
     path: '/',
     expires: new Date(0),
