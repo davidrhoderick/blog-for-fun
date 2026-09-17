@@ -15,13 +15,30 @@ export type Viewer = {
   roles: string[]
 }
 
-const graphQLUrl = () => {
-  const value = process.env.GRAPHQL_URL ?? 'http://localhost:4000/graphql'
+export const resolveGraphQLUrl = (
+  value = process.env.GRAPHQL_URL,
+  environment = process.env.NODE_ENV,
+) => {
+  if (!value && environment === 'production') {
+    throw new Error('GRAPHQL_URL is required in production')
+  }
+
+  const configuredValue = value ?? 'http://localhost:4000/graphql'
+  let url: URL
   try {
-    return new URL(value).toString()
+    url = new URL(configuredValue)
   } catch {
     throw new Error('GRAPHQL_URL must be an absolute URL')
   }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('GRAPHQL_URL must use HTTP or HTTPS')
+  }
+  if (environment === 'production' && url.protocol !== 'https:') {
+    throw new Error('GRAPHQL_URL must use HTTPS in production')
+  }
+
+  return url.toString()
 }
 
 const sessionCookie = (request: Request) => {
@@ -41,7 +58,7 @@ export const requestGraphQL = async <T>(
   variables?: Record<string, unknown>,
 ) => {
   const cookie = sessionCookie(request)
-  const response = await fetch(graphQLUrl(), {
+  const response = await fetch(resolveGraphQLUrl(), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

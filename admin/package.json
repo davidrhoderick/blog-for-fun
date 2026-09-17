@@ -6,6 +6,7 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
+    "test": "tsx --test \"app/**/*.test.ts\"",
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.23.9",
     "typescript": "^5.9.3",
     "vite": "^8.0.3"
   }
