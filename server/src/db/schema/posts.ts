@@ -16,6 +16,7 @@ export const posts = sqliteTable(
     slug: text('slug').notNull(),
     title: text('title').notNull(),
     markdownContent: text('markdown_content').notNull(),
+    publishedAt: integer('published_at', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -23,7 +24,13 @@ export const posts = sqliteTable(
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (table) => [uniqueIndex('posts_slug_idx').on(table.slug)],
+  (table) => [
+    uniqueIndex('posts_slug_idx').on(table.slug),
+    index('posts_published_at_created_at_idx').on(
+      table.publishedAt,
+      table.createdAt,
+    ),
+  ],
 )
 
 export const postRevisions = sqliteTable(

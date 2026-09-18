@@ -3,6 +3,7 @@ export const roles = ['administrator'] as const
 export type Role = (typeof roles)[number]
 
 export const permissions = [
+  'posts:readUnpublished',
   'posts:create',
   'posts:update',
   'posts:delete',

@@ -4,6 +4,7 @@ import type { Permission, Role } from './types'
 
 const permissionsByRole: Record<Role, ReadonlySet<Permission>> = {
   administrator: new Set([
+    'posts:readUnpublished',
     'posts:create',
     'posts:update',
     'posts:delete',

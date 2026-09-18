@@ -29,6 +29,7 @@ input PutPostInput {
   slug: Slug
   title: NonEmptyString
   markdownContent: String
+  publishedAt: DateTimeISO
 }
 
 type DeletedPost implements DeletedEntity {
@@ -40,6 +41,7 @@ type Post implements Entity {
   slug: Slug!
   title: NonEmptyString!
   markdownContent: String!
+  publishedAt: DateTimeISO
   createdAt: DateTimeISO!
   updatedAt: DateTimeISO!
   """

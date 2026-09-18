@@ -7,9 +7,6 @@ work remains, ordered by priority.
 
 ### High priority
 
-- Add an explicit draft and publication model to posts, then filter every public
-  post query to published content. GraphQL middleware cannot provide this
-  boundary without publication state in the database and query layer.
 - Make GraphQL authorization fail closed for mutations through middleware, a
   schema directive, or an explicit mutation policy registry. Require every
   mutation to declare either a permission or an intentionally public policy;

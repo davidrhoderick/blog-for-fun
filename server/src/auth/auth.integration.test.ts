@@ -35,6 +35,8 @@ const administrator = {
   password: 'a long test password',
 }
 
+let authenticatedPostId: string
+
 before(async () => {
   await migrate(db, { migrationsFolder })
   await bootstrapAdministrator(administrator)
@@ -143,18 +145,45 @@ test('authenticated viewer and administrator mutation use the session', async ()
           slug: "authenticated-post"
           title: "Authenticated post"
           markdownContent: "Private edit"
-        }) { slug }
+        }) { id slug publishedAt }
       }`,
       undefined,
       cookie,
     ),
   )
-  assert.deepEqual(mutation.data?.putPost, { slug: 'authenticated-post' })
+  const createdPost = mutation.data?.putPost as
+    | {
+        id: string
+        slug: string
+        publishedAt: string | null
+      }
+    | undefined
+  assert.ok(createdPost)
+  assert.deepEqual(createdPost, {
+    id: createdPost.id,
+    slug: 'authenticated-post',
+    publishedAt: null,
+  })
+  assert.equal(typeof createdPost.id, 'string')
+  authenticatedPostId = createdPost.id
 })
 
 test('public reads remain open while anonymous and roleless writes fail', async () => {
-  const publicRead = await responseJson(await graphql('{ posts { slug } }'))
-  assert.ok(publicRead.data?.posts)
+  const publicRead = await responseJson(
+    await graphql(
+      `query DraftVisibility($id: ID!) {
+        posts { id }
+        post(id: $id) { id }
+        postBySlug(slug: "authenticated-post") { id }
+      }`,
+      { id: authenticatedPostId },
+    ),
+  )
+  assert.deepEqual(publicRead.data, {
+    posts: [],
+    post: null,
+    postBySlug: null,
+  })
 
   const anonymousWrite = await responseJson(
     await graphql('mutation { deletePost(id: "authenticated-post") { id } }'),
@@ -170,14 +199,140 @@ test('public reads remain open while anonymous and roleless writes fail', async 
     passwordHash: await hashPassword('another long test password'),
   })
   const { token } = await createSession(rolelessUserId)
+  const rolelessCookie = `${SESSION_COOKIE_NAME}=${token}`
+  const rolelessRead = await responseJson(
+    await graphql(
+      `query DraftVisibility($id: ID!) {
+        posts { id }
+        post(id: $id) { id }
+        postBySlug(slug: "authenticated-post") { id }
+      }`,
+      { id: authenticatedPostId },
+      rolelessCookie,
+    ),
+  )
+  assert.deepEqual(rolelessRead.data, publicRead.data)
+
   const rolelessWrite = await responseJson(
     await graphql(
       'mutation { deletePost(id: "authenticated-post") { id } }',
       undefined,
-      `${SESSION_COOKIE_NAME}=${token}`,
+      rolelessCookie,
     ),
   )
   assert.equal(rolelessWrite.errors?.[0]?.extensions?.code, 'FORBIDDEN')
+})
+
+test('administrator can read drafts and control publication timing', async () => {
+  const { cookie } = await login()
+  const administratorRead = await responseJson(
+    await graphql(
+      `query DraftVisibility($id: ID!) {
+        posts { id publishedAt }
+        post(id: $id) { id publishedAt }
+        postBySlug(slug: "authenticated-post") { id publishedAt }
+      }`,
+      { id: authenticatedPostId },
+      cookie,
+    ),
+  )
+  const draft = { id: authenticatedPostId, publishedAt: null }
+  assert.deepEqual(administratorRead.data, {
+    posts: [draft],
+    post: draft,
+    postBySlug: draft,
+  })
+
+  const scheduledAt = new Date(Date.now() + 60 * 60 * 1_000).toISOString()
+  const schedule = await responseJson(
+    await graphql(
+      `mutation Schedule($id: ID!, $publishedAt: DateTimeISO!) {
+        putPost(input: { id: $id, publishedAt: $publishedAt }) {
+          id
+          publishedAt
+          revisions { nodes { id } }
+        }
+      }`,
+      { id: authenticatedPostId, publishedAt: scheduledAt },
+      cookie,
+    ),
+  )
+  assert.equal(schedule.errors, undefined)
+  assert.ok((schedule.data?.putPost as { publishedAt?: string })?.publishedAt)
+  assert.deepEqual(
+    (schedule.data?.putPost as { revisions?: { nodes: unknown[] } })?.revisions
+      ?.nodes,
+    [],
+  )
+
+  const scheduledRead = await responseJson(
+    await graphql(
+      `query ScheduledVisibility($id: ID!) {
+        posts { id }
+        post(id: $id) { id }
+        postBySlug(slug: "authenticated-post") { id }
+      }`,
+      { id: authenticatedPostId },
+    ),
+  )
+  assert.deepEqual(scheduledRead.data, {
+    posts: [],
+    post: null,
+    postBySlug: null,
+  })
+
+  const publishedAt = new Date(Date.now() - 60 * 1_000).toISOString()
+  const publish = await responseJson(
+    await graphql(
+      `mutation Publish($id: ID!, $publishedAt: DateTimeISO!) {
+        putPost(input: { id: $id, publishedAt: $publishedAt }) {
+          publishedAt
+        }
+      }`,
+      { id: authenticatedPostId, publishedAt },
+      cookie,
+    ),
+  )
+  assert.ok((publish.data?.putPost as { publishedAt?: string })?.publishedAt)
+
+  const publishedRead = await responseJson(
+    await graphql(
+      `query PublishedVisibility($id: ID!) {
+        posts { id }
+        post(id: $id) { id }
+        postBySlug(slug: "authenticated-post") { id }
+      }`,
+      { id: authenticatedPostId },
+    ),
+  )
+  const published = { id: authenticatedPostId }
+  assert.deepEqual(publishedRead.data, {
+    posts: [published],
+    post: published,
+    postBySlug: published,
+  })
+
+  const unpublish = await responseJson(
+    await graphql(
+      `mutation Unpublish($id: ID!) {
+        putPost(input: { id: $id, publishedAt: null }) {
+          publishedAt
+        }
+      }`,
+      { id: authenticatedPostId },
+      cookie,
+    ),
+  )
+  assert.deepEqual(unpublish.data?.putPost, {
+    publishedAt: null,
+  })
+
+  const unpublishedRead = await responseJson(
+    await graphql(
+      '{ posts { id } postBySlug(slug: "authenticated-post") { id } }',
+    ),
+  )
+  assert.deepEqual(unpublishedRead.data, { posts: [], postBySlug: null })
 })
 
 test('logout revokes the session and clears its cookie', async () => {

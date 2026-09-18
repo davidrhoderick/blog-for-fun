@@ -6,6 +6,7 @@ export const toPost = (post: typeof posts.$inferSelect): Post => ({
   slug: post.slug,
   title: post.title,
   markdownContent: post.markdownContent,
+  publishedAt: post.publishedAt,
   createdAt: post.createdAt,
   updatedAt: post.updatedAt,
   revisions: {
