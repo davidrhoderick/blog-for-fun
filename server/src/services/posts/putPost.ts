@@ -10,7 +10,6 @@ type CreatePostInput = {
   slug: string
   title: string
   markdownContent: string
-  publishedAt: Date | null
 }
 
 const duplicateSlugError = () =>
@@ -45,7 +44,6 @@ const createPostInput = (input: PutPostInput): CreatePostInput => {
     slug: input.slug,
     title: input.title,
     markdownContent: input.markdownContent,
-    publishedAt: input.publishedAt ? new Date(input.publishedAt) : null,
   }
 }
 
@@ -81,20 +79,12 @@ const updatePost = async (id: string, input: PutPostInput) => {
     throw new GraphQLError('Post fields cannot be null')
   }
 
-  const publishedAt =
-    input.publishedAt === undefined
-      ? undefined
-      : input.publishedAt === null
-        ? null
-        : new Date(input.publishedAt)
-
   const values = {
     ...(input.slug === undefined ? {} : { slug: input.slug }),
     ...(input.title === undefined ? {} : { title: input.title.trim() }),
     ...(input.markdownContent === undefined
       ? {}
       : { markdownContent: input.markdownContent }),
-    ...(publishedAt === undefined ? {} : { publishedAt }),
   }
 
   const slugChanged = values.slug !== undefined && values.slug !== post.slug
@@ -102,16 +92,7 @@ const updatePost = async (id: string, input: PutPostInput) => {
     (values.title !== undefined && values.title !== post.title) ||
     (values.markdownContent !== undefined &&
       values.markdownContent !== post.markdownContent)
-  const publicationChanged =
-    publishedAt !== undefined &&
-    publishedAt?.getTime() !==
-      (post.publishedAt instanceof Date
-        ? post.publishedAt.getTime()
-        : post.publishedAt
-          ? new Date(post.publishedAt).getTime()
-          : undefined)
-
-  if (!slugChanged && !contentChanged && !publicationChanged) {
+  if (!slugChanged && !contentChanged) {
     return post
   }
 

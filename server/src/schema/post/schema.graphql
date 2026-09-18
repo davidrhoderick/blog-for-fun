@@ -21,6 +21,8 @@ type Query {
 
 type Mutation {
   putPost(input: PutPostInput!): Post!
+  publishPost(id: ID!, publishedAt: DateTimeISO): Post!
+  unpublishPost(id: ID!): Post!
   deletePost(id: ID!): DeletedEntity
 }
 
@@ -29,7 +31,6 @@ input PutPostInput {
   slug: Slug
   title: NonEmptyString
   markdownContent: String
-  publishedAt: DateTimeISO
 }
 
 type DeletedPost implements DeletedEntity {

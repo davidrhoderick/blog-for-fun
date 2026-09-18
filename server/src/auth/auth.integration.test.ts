@@ -189,6 +189,18 @@ test('public reads remain open while anonymous and roleless writes fail', async 
     await graphql('mutation { deletePost(id: "authenticated-post") { id } }'),
   )
   assert.equal(anonymousWrite.errors?.[0]?.extensions?.code, 'UNAUTHENTICATED')
+  const anonymousPublish = await responseJson(
+    await graphql(
+      `mutation Publish($id: ID!) {
+        publishPost(id: $id) { id }
+      }`,
+      { id: authenticatedPostId },
+    ),
+  )
+  assert.equal(
+    anonymousPublish.errors?.[0]?.extensions?.code,
+    'UNAUTHENTICATED',
+  )
 
   const rolelessUserId = crypto.randomUUID()
   await db.insert(authUsers).values({ id: rolelessUserId })
@@ -221,6 +233,16 @@ test('public reads remain open while anonymous and roleless writes fail', async 
     ),
   )
   assert.equal(rolelessWrite.errors?.[0]?.extensions?.code, 'FORBIDDEN')
+  const rolelessUnpublish = await responseJson(
+    await graphql(
+      `mutation Unpublish($id: ID!) {
+        unpublishPost(id: $id) { id }
+      }`,
+      { id: authenticatedPostId },
+      rolelessCookie,
+    ),
+  )
+  assert.equal(rolelessUnpublish.errors?.[0]?.extensions?.code, 'FORBIDDEN')
 })
 
 test('administrator can read drafts and control publication timing', async () => {
@@ -247,7 +269,7 @@ test('administrator can read drafts and control publication timing', async () =>
   const schedule = await responseJson(
     await graphql(
       `mutation Schedule($id: ID!, $publishedAt: DateTimeISO!) {
-        putPost(input: { id: $id, publishedAt: $publishedAt }) {
+        publishPost(id: $id, publishedAt: $publishedAt) {
           id
           publishedAt
           revisions { nodes { id } }
@@ -258,10 +280,12 @@ test('administrator can read drafts and control publication timing', async () =>
     ),
   )
   assert.equal(schedule.errors, undefined)
-  assert.ok((schedule.data?.putPost as { publishedAt?: string })?.publishedAt)
+  assert.ok(
+    (schedule.data?.publishPost as { publishedAt?: string })?.publishedAt,
+  )
   assert.deepEqual(
-    (schedule.data?.putPost as { revisions?: { nodes: unknown[] } })?.revisions
-      ?.nodes,
+    (schedule.data?.publishPost as { revisions?: { nodes: unknown[] } })
+      ?.revisions?.nodes,
     [],
   )
 
@@ -281,19 +305,20 @@ test('administrator can read drafts and control publication timing', async () =>
     postBySlug: null,
   })
 
-  const publishedAt = new Date(Date.now() - 60 * 1_000).toISOString()
   const publish = await responseJson(
     await graphql(
-      `mutation Publish($id: ID!, $publishedAt: DateTimeISO!) {
-        putPost(input: { id: $id, publishedAt: $publishedAt }) {
+      `mutation Publish($id: ID!) {
+        publishPost(id: $id) {
           publishedAt
         }
       }`,
-      { id: authenticatedPostId, publishedAt },
+      { id: authenticatedPostId },
       cookie,
     ),
   )
-  assert.ok((publish.data?.putPost as { publishedAt?: string })?.publishedAt)
+  assert.ok(
+    (publish.data?.publishPost as { publishedAt?: string })?.publishedAt,
+  )
 
   const publishedRead = await responseJson(
     await graphql(
@@ -315,7 +340,7 @@ test('administrator can read drafts and control publication timing', async () =>
   const unpublish = await responseJson(
     await graphql(
       `mutation Unpublish($id: ID!) {
-        putPost(input: { id: $id, publishedAt: null }) {
+        unpublishPost(id: $id) {
           publishedAt
         }
       }`,
@@ -323,7 +348,7 @@ test('administrator can read drafts and control publication timing', async () =>
       cookie,
     ),
   )
-  assert.deepEqual(unpublish.data?.putPost, {
+  assert.deepEqual(unpublish.data?.unpublishPost, {
     publishedAt: null,
   })
 
