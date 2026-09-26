@@ -52,6 +52,26 @@ const sessionCookie = (request: Request) => {
     )
 }
 
+export const proxyGraphQL = async (request: Request) => {
+  const cookie = sessionCookie(request)
+  const response = await fetch(resolveGraphQLUrl(), {
+    method: 'POST',
+    headers: {
+      'content-type': request.headers.get('content-type') ?? 'application/json',
+      ...(cookie ? { cookie } : {}),
+    },
+    body: await request.text(),
+  })
+  const headers = new Headers({
+    'cache-control': 'no-store',
+    'content-type': response.headers.get('content-type') ?? 'application/json',
+  })
+  const setCookie = response.headers.get('set-cookie')
+  if (setCookie) headers.set('set-cookie', setCookie)
+
+  return new Response(response.body, { headers, status: response.status })
+}
+
 export const requestGraphQL = async <T>(
   request: Request,
   query: string,

@@ -100,10 +100,48 @@ Let's also see about running a review agent depending on cost.  We care about se
 
 ## Set up the admin UI
 
-We want to be able to log in and log out as well as CRUD posts.  This should be a client-side SPA with no SSR.
+The admin keeps React Router SSR only for document rendering, authentication
+validation, redirects, and login/logout actions. Editorial data must not be
+loaded in SSR route loaders.
+
+- Use Relay for client-side editorial queries and mutations.
+- Route Relay browser traffic through the same-origin `/api/graphql` BFF proxy.
+  The proxy forwards the session cookie to the private GraphQL service and
+  returns GraphQL data plus any session-cookie updates unchanged.
+- Keep the GraphQL service private to browser traffic. Do not enable
+  credentialed cross-origin GraphQL access for the admin.
+- Generate the merged server SDL and Relay TypeScript artifacts before every
+  development, build, test, and CI invocation. The authored server SDL remains
+  the single schema source of truth.
+- Create `packages/graphql-runtime` for shared Relay Environment and network
+  factories. Admin injects its same-origin BFF transport; the public site will
+  later inject SSR and hydration transports.
+- Create `packages/ui` for themed shadcn primitives and shared presentation
+  components. Keep application routes and feature-specific fragments in each
+  application.
+- Standardize cacheable persisted records on Relay `Node`, opaque global IDs,
+  `node(id:)`, and connection-based pagination. Use distinct public and
+  administrator post connections so draft visibility is explicit.
+
+We want to be able to log in and log out as well as CRUD posts.
+
+### Frontend conventions
+
+- Keep route JSX free of long Tailwind utility strings. Define reusable styles
+  with Tailwind v4 `@apply` in component CSS and apply semantic class names in
+  markup.
+- Put themed shadcn primitives in `packages/ui`. Put composed, application-wide
+  components in an app-level common component layer; keep feature-specific
+  composition with its feature.
+- Use React Hook Form for application forms. Form state belongs to the form;
+  submit handlers should only adapt validated form values to mutation inputs.
+- Add feature-local adapters that map Relay entity data to form defaults and
+  form values to GraphQL mutation variables. Do not embed those mappings in
+  route components.
 
 ## Set up the public facing app
 
-This should be SSR driven apollo client hydrating client-side where necessary (deferred loading) for high performance.
+This should be SSR driven Relay client hydrating client-side where necessary
+(deferred loading) for high performance.
 
 Start without worrying about styling.  Add it later.  Use something like `@apply` for it with tailwind.

@@ -1,0 +1,7 @@
+{
+  "src": "./app",
+  "schema": "../server/src/schema/schema.generated.graphql",
+  "language": "typescript",
+  "eagerEsModules": true,
+  "artifactDirectory": "./app/__generated__"
+}

@@ -148,3 +148,69 @@ body {
     @apply font-sans;
   }
 }
+
+@layer components {
+  .editor-loading {
+    @apply border border-slate-200 px-5 py-8 text-sm text-slate-500;
+  }
+
+  .post-editor {
+    @apply grid gap-8 md:grid-cols-[minmax(0,1fr)_15rem];
+  }
+
+  .post-editor-fields {
+    @apply space-y-6;
+  }
+
+  .post-editor-field {
+    @apply grid gap-1;
+  }
+
+  .post-editor-label {
+    @apply text-xs font-medium tracking-[0.12em] text-slate-600 uppercase;
+  }
+
+  .post-editor-input {
+    @apply w-full border border-slate-300 bg-white px-3 py-2 text-slate-950 outline-none transition focus:border-cyan-700 focus:ring-2 focus:ring-cyan-700/15;
+  }
+
+  .post-editor-title {
+    @apply py-2 font-heading text-3xl font-semibold tracking-[-0.04em] sm:text-4xl;
+  }
+
+  .post-editor-markdown {
+    @apply min-h-96 border border-slate-300 bg-white text-sm leading-6;
+  }
+
+  .post-editor-markdown [contenteditable] {
+    @apply min-h-80 font-mono;
+  }
+
+  .post-editor-panel {
+    @apply h-fit border border-slate-200 bg-white p-5;
+  }
+
+  .post-editor-panel-narrow {
+    @apply md:hidden;
+  }
+
+  .post-editor-panel-wide {
+    @apply hidden md:block;
+  }
+
+  .post-editor-actions {
+    @apply mt-5 space-y-2;
+  }
+
+  .post-editor-button {
+    @apply w-full border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-950 hover:bg-slate-950 hover:text-white disabled:cursor-wait disabled:opacity-60;
+  }
+
+  .post-editor-button-primary {
+    @apply border-slate-950 bg-slate-950 text-white hover:bg-cyan-800 hover:border-cyan-800;
+  }
+
+  .post-editor-button-danger {
+    @apply border-red-200 text-red-700 hover:border-red-700 hover:bg-red-700;
+  }
+}

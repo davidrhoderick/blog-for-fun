@@ -2,3 +2,4 @@ node_modules
 .env
 server/src/schema/*.generated.ts
 server/src/schema/schema.generated.graphqls
+server/src/schema/schema.generated.graphql

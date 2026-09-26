@@ -1,7 +1,10 @@
 packages:
+  - 'packages/*'
   - 'public'
   - 'admin'
   - 'server'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@mdxeditor/editor@4.3.0'

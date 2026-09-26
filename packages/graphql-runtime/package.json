@@ -1,0 +1,14 @@
+{
+  "name": "@blog/graphql-runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "relay-runtime": "^21.0.1"
+  },
+  "devDependencies": {
+    "relay-runtime": "^21.0.1"
+  }
+}
