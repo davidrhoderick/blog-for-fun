@@ -52,31 +52,13 @@ export default function Login({ actionData }: Route.ComponentProps) {
   const isSubmitting = navigation.state === 'submitting'
 
   return (
-    <main className="relative grid min-h-screen overflow-hidden bg-[#071316] text-stone-100 lg:grid-cols-[minmax(0,1.15fr)_minmax(28rem,0.85fr)]">
-      <section className="relative hidden border-r border-white/10 p-12 lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(53,151,165,0.2),transparent_36%),linear-gradient(145deg,transparent_35%,rgba(255,255,255,0.035)_35%,rgba(255,255,255,0.035)_36%,transparent_36%)] bg-[length:auto,42px_42px]" />
-        <p className="relative font-heading text-sm font-semibold tracking-[0.24em] text-cyan-200 uppercase">
-          Editorial console
-        </p>
-        <div className="relative max-w-xl pb-12">
-          <p className="mb-5 text-xs tracking-[0.2em] text-stone-400 uppercase">
-            Private workspace
-          </p>
-          <h1 className="font-heading text-6xl leading-[0.98] font-semibold tracking-[-0.05em]">
-            Write deliberately. Publish confidently.
-          </h1>
-          <p className="mt-7 max-w-md text-base leading-7 text-stone-400">
-            Draft, revise, and maintain the archive from one focused workspace.
-          </p>
-        </div>
-      </section>
-
-      <section className="flex items-center justify-center px-6 py-16 sm:px-12">
-        <div className="w-full max-w-sm">
-          <p className="mb-12 font-heading text-sm font-semibold tracking-[0.2em] text-cyan-200 uppercase lg:hidden">
+    <main className="flex min-h-screen items-center justify-center bg-[#071316] px-5 py-12 text-stone-100">
+      <section className="w-full max-w-md border border-white/10 bg-white/[0.04] p-7 shadow-2xl shadow-black/20 sm:p-10">
+        <div>
+          <p className="font-heading text-sm font-semibold tracking-[0.18em] text-cyan-200 uppercase">
             Editorial console
           </p>
-          <p className="text-xs tracking-[0.18em] text-stone-500 uppercase">
+          <p className="mt-10 text-xs tracking-[0.16em] text-stone-500 uppercase">
             Authorized access only
           </p>
           <h2 className="mt-3 font-heading text-4xl font-semibold tracking-[-0.04em]">
@@ -96,7 +78,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
                 type="email"
                 autoComplete="username"
                 required
-                className="h-12 w-full border border-white/15 bg-white/[0.035] px-4 text-base text-white outline-none transition focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
+                className="h-12 w-full border border-white/15 bg-black/15 px-4 text-base text-white outline-none transition focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
               />
             </label>
             <label className="block">
@@ -108,7 +90,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
                 type="password"
                 autoComplete="current-password"
                 required
-                className="h-12 w-full border border-white/15 bg-white/[0.035] px-4 text-base text-white outline-none transition focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
+                className="h-12 w-full border border-white/15 bg-black/15 px-4 text-base text-white outline-none transition focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
               />
             </label>
 
