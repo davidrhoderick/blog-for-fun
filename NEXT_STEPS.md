@@ -123,7 +123,25 @@ loaded in SSR route loaders.
   `node(id:)`, and connection-based pagination. Use distinct public and
   administrator post connections so draft visibility is explicit.
 
-We want to be able to log in and log out as well as CRUD posts.
+Implemented so far:
+
+- Login/logout and authenticated route protection.
+- Same-origin `/api/graphql` BFF proxy for Relay browser requests.
+- Client-only Relay environment and generated Relay artifacts.
+- Posts list and Markdown-compatible MDXEditor post editor with update and
+  publish/unpublish actions.
+- Editor styling includes the MDXEditor package stylesheet and semantic Tailwind
+  component classes.
+
+Remaining admin work:
+
+- Browser-test the authenticated workflow end-to-end: open a post, edit its
+  title/slug/Markdown, update it, and publish/unpublish it.
+- Add create and delete post workflows to complete CRUD.
+- Migrate the server schema to Relay conventions: `Node`, opaque global IDs,
+  `node(id:)`, and separate public/admin paginated post connections.
+- Extract repeated post-action panel markup if future editor actions make the
+  duplication costly to maintain.
 
 ### Frontend conventions
 
