@@ -17,11 +17,11 @@ media changes by hand.
   source control or logs.
 - Authentication runbook documentation and generic failed-login service error
   handling are implemented locally but uncommitted.
-- Media database, GraphQL, storage, and admin-picker changes are implemented
-  locally but uncommitted and are not yet a complete, production-safe slice.
-- The last completed local checks passed: Biome, server TypeScript, admin
-  typecheck/Relay generation, Fly config validation, and the production image
-  build. Run the full test suite again after finishing the media behavior.
+- The initial media upload foundation is committed as `f522058`; the safer
+  prepare/finalize lifecycle and attachment-context work is committed as
+  `221926e`.
+- The latest completed local checks pass: Biome, migration history, all 20 server
+  tests, server TypeScript, Relay/admin typecheck, and public typecheck.
 
 ## Media library
 
@@ -59,7 +59,8 @@ media changes by hand.
 - Added the `media_assets` table and nullable `posts.featured_media_id` schema,
   plus migration `server/migrations/20260927002621_media-assets/`.
 - Added administrator `media:read` and `media:write` permissions.
-- Added protected GraphQL `mediaAssets` and `createMediaUpload` operations.
+- Added protected GraphQL `mediaAssets`, `prepareMediaUpload`, and
+  `finalizeMediaUpload` operations.
 - Added Tigris S3 client and pre-signed `PUT` URLs. Uploads currently accept
   AVIF, GIF, JPEG, PNG, and WebP up to 10 MB.
 - Added `storage:configure-cors`, allowing `PUT` from local admin development
@@ -81,6 +82,16 @@ media changes by hand.
 - The current inline grid and direct Markdown URL insertion are prototypes to be
   replaced by the shared Media page/picker and ID-based embed syntax described
   above.
+- Added a second forward-only migration with pending/ready upload status,
+  optional post attachment context, dimensions, finalization timestamp, and
+  indexes. Existing assets are backfilled as ready.
+- Replaced one-step upload creation with `prepareMediaUpload` and
+  `finalizeMediaUpload`. Signing occurs before persistence, pending assets stay
+  out of the library, attachment post IDs are validated, and finalization uses
+  S3 `HeadObject` to verify content type and byte size.
+- Metadata mismatches delete both the object and pending database row. The post
+  editor finalizes an upload before displaying or inserting it and supplies the
+  current post ID as attachment context.
 
 ### Verified locally
 
@@ -89,22 +100,19 @@ media changes by hand.
 - Verified GraphQL health, public SSR, admin login, authenticated admin routes,
   media authorization, signed upload creation, browser-upload CORS, object
   upload, public object retrieval, and media-library listing.
-- Verified Biome, admin production build, TypeScript, migration history, and all
-  17 server tests. Manual browser verification of the editor interaction remains
-  before committing the media slice.
+- Verified Biome, admin/public production builds, TypeScript, migration history,
+  and all 20 server tests. Media lifecycle integration tests use isolated libSQL
+  and S3 emulation. Manual browser verification of the updated editor interaction
+  remains.
 
 ### Finish before considering uploads complete
 
-1. Fix the upload lifecycle. `createMediaUpload` currently inserts a database
-   row before the browser uploads the object, so failed or abandoned uploads
-   leave broken assets. Prefer a prepare/finalize flow: reserve the object key
-   and issue the signed URL, upload it, then finalize only after the server
-   verifies the object with `HeadObject`. Alternatively persist an explicit
-   pending state and clean stale rows/objects in bounded batches.
-2. Do not trust the browser-provided MIME type, size, or extension as proof of
+1. Do not trust the browser-provided MIME type, size, or extension as proof of
    image content. On finalization, verify object metadata and decode or inspect
    the file signature before making the asset available. Define how malformed
    objects are deleted.
+2. Add bounded cleanup for pending uploads that are abandoned before
+   finalization, including deletion of any uploaded object.
 3. Add an explicit decorative-image option before allowing empty alt text.
 4. Add loading, upload-progress, success, retry, and accessible error
    states. Disable duplicate submissions and handle Relay/GraphQL errors without
@@ -114,10 +122,9 @@ media changes by hand.
 6. Add update-alt-text and delete workflows. Deletion must detect post usage,
    avoid breaking published content, remove the Tigris object safely, and handle
    partial storage/database failure.
-7. Decide the stable delivery URL before publishing media broadly. The current
-   API returns a direct Tigris bucket URL, while the intended design called for
-   stable `/media/:id` URLs or a custom asset domain. Implement ID-based embeds
-   and avoid persisting provider URLs in Markdown.
+7. Implement the selected stable `/media/:id` delivery route before publishing
+   media broadly. The current API still returns a direct Tigris bucket URL;
+   switch embeds to asset IDs and avoid persisting provider URLs in Markdown.
 8. Add service and GraphQL tests for authorization, allowed types, size limits,
    filename normalization, ordering, missing storage configuration, signed URL
    generation, finalization, stale uploads, and anonymous access rejection.
@@ -157,27 +164,23 @@ media changes by hand.
 
 ### Shared admin library
 
-1. Add nullable `attached_post_id`, image dimensions, and any finalized/upload
-   status needed by the safe upload lifecycle to `media_assets` in a new
-   forward-only migration.
-2. Extend upload input with optional `attachedPostId`; authorize and validate the
-   post before attaching it. Preserve assets when an attached post is deleted by
-   setting the relation to null.
-3. Add a paginated administrator media connection with search/filter support and
+1. Populate image dimensions during verified finalization. The nullable columns
+   and safe upload status are already present.
+2. Add a paginated administrator media connection with search/filter support and
    fields for attachment, usage, dimensions, upload status, and metadata.
-4. Add `/admin/media`, navigation adjacent to Posts, and reusable Media library
+3. Add `/admin/media`, navigation adjacent to Posts, and reusable Media library
    components for grid/list browsing, uploading, selection, metadata editing,
    and safe deletion.
-5. Reuse the same picker in the post editor. Opening it from a post supplies the
+4. Reuse the same picker in the post editor. Opening it from a post supplies the
    post ID to uploads but does not filter the library to that post.
-6. Replace provider-URL insertion with
+5. Replace provider-URL insertion with
    `![alt](/media/<asset-id> "Optional caption")`. Keep MDXEditor's native image
    representation and add picker fields for per-embed alt text and caption.
-7. Add a public `/media/:id` resource route that resolves the asset to storage
+6. Add a public `/media/:id` resource route that resolves the asset to storage
    without exposing provider identity in authored content. Add Markdown rendering
    that treats the optional image title as a caption and emits semantic
    `figure`/`img`/`figcaption` markup while handling missing assets safely.
-8. Add tests proving global reuse, attachment nulling on post deletion, usage
+7. Add tests proving global reuse, attachment nulling on post deletion, usage
    detection, picker behavior, stable image URL round-tripping, captions, and
    public rendering.
 
