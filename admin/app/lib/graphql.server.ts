@@ -34,7 +34,8 @@ export const resolveGraphQLUrl = (
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('GRAPHQL_URL must use HTTP or HTTPS')
   }
-  if (environment === 'production' && url.protocol !== 'https:') {
+  const loopback = ['127.0.0.1', '::1', 'localhost'].includes(url.hostname)
+  if (environment === 'production' && url.protocol !== 'https:' && !loopback) {
     throw new Error('GRAPHQL_URL must use HTTPS in production')
   }
 

@@ -1,0 +1,12 @@
+.git
+.opencode
+.agents
+.env
+**/.env
+**/.env.*
+node_modules
+**/node_modules
+**/build
+**/.react-router
+coverage
+*.log

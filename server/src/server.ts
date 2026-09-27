@@ -37,8 +37,20 @@ export const createApp = () =>
   })
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const server = createServer(createApp())
-  server.listen(4000, () => {
-    console.info('Server is running on http://localhost:4000/graphql')
+  const app = createApp()
+  const server = createServer((request, response) => {
+    if (request.url === '/health') {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end('ok')
+      return
+    }
+
+    app(request, response)
+  })
+  const host = process.env.HOST ?? '127.0.0.1'
+  const port = Number(process.env.PORT ?? 4000)
+
+  server.listen(port, host, () => {
+    console.info(`Server is running on http://${host}:${port}/graphql`)
   })
 }

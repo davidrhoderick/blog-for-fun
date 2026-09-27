@@ -4,6 +4,7 @@ import { defineConfig } from 'vite'
 import relay from 'vite-plugin-relay'
 
 export default defineConfig({
+  base: '/admin/',
   plugins: [relay, tailwindcss(), reactRouter()],
   resolve: {
     dedupe: ['relay-runtime'],

@@ -1,0 +1,22 @@
+{
+  auto_https off
+}
+
+:8080 {
+  handle /health {
+    reverse_proxy 127.0.0.1:4000
+  }
+
+  handle /admin* {
+    reverse_proxy 127.0.0.1:3001
+  }
+
+  @admin host {$ADMIN_HOST:admin.localhost}
+  handle @admin {
+    reverse_proxy 127.0.0.1:3001
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:3000
+  }
+}
