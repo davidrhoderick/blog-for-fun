@@ -186,6 +186,43 @@ body {
     @apply min-h-80 font-mono;
   }
 
+  .media-library {
+    @apply space-y-3 border border-slate-300 bg-white p-3;
+  }
+
+  .media-library-upload {
+    @apply inline-flex border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-950 hover:bg-slate-950 hover:text-white disabled:cursor-wait disabled:opacity-60;
+  }
+
+  .media-library-file,
+  .media-library-field {
+    @apply grid gap-1;
+  }
+
+  .media-library-file input {
+    @apply block w-full text-sm text-slate-600 file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700;
+  }
+
+  .media-library-error {
+    @apply text-sm text-red-700;
+  }
+
+  .media-library-empty {
+    @apply col-span-full text-sm text-slate-500;
+  }
+
+  .media-library-grid {
+    @apply grid grid-cols-2 gap-3 sm:grid-cols-3;
+  }
+
+  .media-library-item {
+    @apply grid gap-2 text-left text-xs text-slate-700;
+  }
+
+  .media-library-item img {
+    @apply aspect-square w-full border border-slate-200 object-cover;
+  }
+
   .post-editor-panel {
     @apply h-fit border border-slate-200 bg-white p-5;
   }

@@ -17,6 +17,7 @@ type Query {
     """
     after: String
   ): PostRevisionConnection!
+  mediaAssets: [MediaAsset!]!
 }
 
 type Mutation {
@@ -24,6 +25,29 @@ type Mutation {
   publishPost(id: ID!, publishedAt: DateTimeISO): Post!
   unpublishPost(id: ID!): Post!
   deletePost(id: ID!): DeletedEntity
+  createMediaUpload(input: CreateMediaUploadInput!): MediaUpload!
+}
+
+input CreateMediaUploadInput {
+  filename: NonEmptyString!
+  contentType: NonEmptyString!
+  size: Int!
+  altText: String!
+}
+
+type MediaUpload {
+  asset: MediaAsset!
+  uploadUrl: String!
+}
+
+type MediaAsset implements Entity {
+  id: ID!
+  filename: NonEmptyString!
+  contentType: NonEmptyString!
+  size: Int!
+  altText: String!
+  url: String!
+  createdAt: DateTimeISO!
 }
 
 input PutPostInput {

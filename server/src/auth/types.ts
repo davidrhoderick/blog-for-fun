@@ -8,6 +8,8 @@ export const permissions = [
   'posts:update',
   'posts:delete',
   'postRevisions:read',
+  'media:read',
+  'media:write',
 ] as const
 
 export type Permission = (typeof permissions)[number]

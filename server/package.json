@@ -14,13 +14,17 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
-    "auth:bootstrap": "tsx src/scripts/bootstrap-auth.ts"
+    "auth:bootstrap": "tsx src/scripts/bootstrap-auth.ts",
+    "storage:dev": "s3rver -d .local/media -a 127.0.0.1 -p 9000 --no-vhost-buckets --allow-mismatched-signatures --configure-bucket blog-for-fun-media config/s3rver-cors.xml",
+    "storage:configure-cors": "tsx src/scripts/configure-media-cors.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@inquirer/prompts": "^8.7.2",
     "@libsql/client": "^0.17.4",
     "@node-rs/argon2": "^2.2.1",
@@ -38,6 +42,7 @@
     "@types/node": "^22.20.1",
     "concurrently": "^10.0.5",
     "drizzle-kit": "1.0.0-rc.4",
+    "s3rver": "^3.7.1",
     "tsx": "^4.23.9"
   }
 }

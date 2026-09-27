@@ -7,7 +7,7 @@ export const relayEnvironment = createRelayEnvironment(
       throw new Error(`Relay operation ${request.name} has no query text`)
     }
 
-    const response = await fetch('/api/graphql', {
+    const response = await fetch(`${import.meta.env.BASE_URL}api/graphql`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },

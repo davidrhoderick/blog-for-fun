@@ -7,10 +7,12 @@ import {
   InsertCodeBlock,
   InsertTable,
   InsertThematicBreak,
+  imagePlugin,
   ListsToggle,
   linkPlugin,
   listsPlugin,
   MDXEditor,
+  type MDXEditorMethods,
   markdownShortcutPlugin,
   quotePlugin,
   tablePlugin,
@@ -19,7 +21,7 @@ import {
   UndoRedo,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import {
   commitMutation,
@@ -27,6 +29,7 @@ import {
   useLazyLoadQuery,
   useRelayEnvironment,
 } from 'react-relay'
+import type { PostEditorCreateMediaUploadMutation } from '../__generated__/PostEditorCreateMediaUploadMutation.graphql'
 import type { PostEditorPublishMutation } from '../__generated__/PostEditorPublishMutation.graphql'
 import type { PostEditorQuery } from '../__generated__/PostEditorQuery.graphql'
 import type { PostEditorSaveMutation } from '../__generated__/PostEditorSaveMutation.graphql'
@@ -39,6 +42,10 @@ type PostFormValues = {
   markdownContent: string
 }
 
+type MediaUploadFormValues = {
+  altText: string
+}
+
 const postEditorQuery = graphql`
   query PostEditorQuery($id: ID!) {
     post(id: $id) {
@@ -47,6 +54,12 @@ const postEditorQuery = graphql`
       slug
       markdownContent
       publishedAt
+    }
+    mediaAssets {
+      id
+      filename
+      altText
+      url
     }
   }
 `
@@ -81,6 +94,15 @@ const unpublishPostMutation = graphql`
   }
 `
 
+const createMediaUploadMutation = graphql`
+  mutation PostEditorCreateMediaUploadMutation($input: CreateMediaUploadInput!) {
+    createMediaUpload(input: $input) {
+      asset { id filename altText url }
+      uploadUrl
+    }
+  }
+`
+
 const toPostFormValues = (post: {
   title: string
   slug: string
@@ -97,18 +119,30 @@ const PostEditor = ({ id }: { id: string }) => {
     return <p className="editor-loading">Post not found.</p>
   }
 
-  return <PostEditorForm id={id} post={data.post} />
+  return (
+    <PostEditorForm id={id} mediaAssets={data.mediaAssets} post={data.post} />
+  )
 }
 
 const PostEditorForm = ({
   id,
+  mediaAssets: initialMediaAssets,
   post,
 }: {
   id: string
+  mediaAssets: PostEditorQuery['response']['mediaAssets']
   post: NonNullable<PostEditorQuery['response']['post']>
 }) => {
   const environment = useRelayEnvironment()
+  const editorRef = useRef<MDXEditorMethods>(null)
   const form = useForm<PostFormValues>({ values: toPostFormValues(post) })
+  const mediaUploadForm = useForm<MediaUploadFormValues>({
+    defaultValues: { altText: '' },
+  })
+  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const published = post.publishedAt !== null
 
   useEffect(() => {
@@ -132,6 +166,58 @@ const PostEditorForm = ({
       },
     )
   }
+
+  const insertImage = (asset: { altText: string; url: string }) => {
+    const altText = asset.altText
+      .replaceAll(/[\r\n]+/g, ' ')
+      .replaceAll(']', '\\]')
+    editorRef.current?.focus(() => {
+      editorRef.current?.insertMarkdown(`![${altText}](${asset.url})`)
+    })
+  }
+
+  const uploadImage = mediaUploadForm.handleSubmit(({ altText }) => {
+    if (!uploadFile) {
+      setUploadError('Choose an image to upload.')
+      return
+    }
+
+    setIsUploading(true)
+    setUploadError(null)
+    commitMutation<PostEditorCreateMediaUploadMutation>(environment, {
+      mutation: createMediaUploadMutation,
+      variables: {
+        input: {
+          filename: uploadFile.name,
+          contentType: uploadFile.type,
+          size: uploadFile.size,
+          altText: altText.trim(),
+        },
+      },
+      onCompleted: async ({ createMediaUpload }) => {
+        try {
+          const response = await fetch(createMediaUpload.uploadUrl, {
+            method: 'PUT',
+            headers: { 'content-type': uploadFile.type },
+            body: uploadFile,
+          })
+          if (!response.ok) throw new Error('Upload failed')
+          setMediaAssets((assets) => [createMediaUpload.asset, ...assets])
+          insertImage(createMediaUpload.asset)
+          setUploadFile(null)
+          mediaUploadForm.reset()
+        } catch {
+          setUploadError('The image could not be uploaded. Please try again.')
+        } finally {
+          setIsUploading(false)
+        }
+      },
+      onError: () => {
+        setIsUploading(false)
+        setUploadError('The image could not be prepared for upload.')
+      },
+    })
+  })
 
   return (
     <form className="post-editor" onSubmit={save}>
@@ -174,9 +260,15 @@ const PostEditorForm = ({
           <MDXEditor
             className="post-editor-markdown"
             markdown={form.watch('markdownContent')}
-            onChange={(markdown) => form.setValue('markdownContent', markdown)}
+            onChange={(markdown) =>
+              form.setValue('markdownContent', markdown, {
+                shouldDirty: true,
+                shouldTouch: true,
+              })
+            }
             plugins={[
               headingsPlugin(),
+              imagePlugin(),
               listsPlugin(),
               quotePlugin(),
               thematicBreakPlugin(),
@@ -199,7 +291,77 @@ const PostEditorForm = ({
                 ),
               }),
             ]}
+            ref={editorRef}
           />
+        </section>
+        <section aria-labelledby="media-label" className="post-editor-field">
+          <span className="post-editor-label" id="media-label">
+            Media library
+          </span>
+          <div className="media-library">
+            <label className="media-library-file">
+              <span className="post-editor-label">Image file</span>
+              <input
+                accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
+                disabled={isUploading}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0]
+                  setUploadFile(file ?? null)
+                  if (file && !mediaUploadForm.getValues('altText')) {
+                    mediaUploadForm.setValue(
+                      'altText',
+                      file.name
+                        .replace(/\.[^.]+$/, '')
+                        .replaceAll(/[-_]/g, ' '),
+                    )
+                  }
+                }}
+                type="file"
+              />
+            </label>
+            <label className="media-library-field">
+              <span className="post-editor-label">Alternative text</span>
+              <input
+                className="post-editor-input"
+                disabled={isUploading}
+                {...mediaUploadForm.register('altText', {
+                  required: 'Describe the image for readers who cannot see it.',
+                })}
+              />
+            </label>
+            {mediaUploadForm.formState.errors.altText ? (
+              <p className="media-library-error">
+                {mediaUploadForm.formState.errors.altText.message}
+              </p>
+            ) : null}
+            <button
+              className="media-library-upload"
+              disabled={isUploading}
+              onClick={uploadImage}
+              type="button"
+            >
+              {isUploading ? 'Uploading image...' : 'Upload and insert'}
+            </button>
+            {uploadError ? (
+              <p className="media-library-error">{uploadError}</p>
+            ) : null}
+            <div className="media-library-grid">
+              {mediaAssets.length === 0 ? (
+                <p className="media-library-empty">No images uploaded yet.</p>
+              ) : null}
+              {mediaAssets.map((asset) => (
+                <button
+                  className="media-library-item"
+                  key={asset.id}
+                  onClick={() => insertImage(asset)}
+                  type="button"
+                >
+                  <img alt="" src={asset.url} />
+                  <span>{asset.altText || asset.filename}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
       </div>
       <aside className="post-editor-panel post-editor-panel-wide">

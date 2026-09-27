@@ -7,6 +7,9 @@ primary_region = "iad"
 [env]
   NODE_ENV = "production"
 
+[deploy]
+  release_command = "pnpm --filter server db:migrate && pnpm --filter server storage:configure-cors"
+
 [http_service]
   internal_port = 8080
   force_https = true

@@ -9,6 +9,8 @@ const permissionsByRole: Record<Role, ReadonlySet<Permission>> = {
     'posts:update',
     'posts:delete',
     'postRevisions:read',
+    'media:read',
+    'media:write',
   ]),
 }
 

@@ -16,6 +16,12 @@ export const posts = sqliteTable(
     slug: text('slug').notNull(),
     title: text('title').notNull(),
     markdownContent: text('markdown_content').notNull(),
+    featuredMediaId: text('featured_media_id').references(
+      () => mediaAssets.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     publishedAt: integer('published_at', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
@@ -31,6 +37,24 @@ export const posts = sqliteTable(
       table.createdAt,
     ),
   ],
+)
+
+export const mediaAssets = sqliteTable(
+  'media_assets',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    objectKey: text('object_key').notNull(),
+    filename: text('filename').notNull(),
+    contentType: text('content_type').notNull(),
+    size: integer('size').notNull(),
+    altText: text('alt_text').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [uniqueIndex('media_assets_object_key_idx').on(table.objectKey)],
 )
 
 export const postRevisions = sqliteTable(

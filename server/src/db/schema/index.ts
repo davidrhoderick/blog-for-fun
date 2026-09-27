@@ -6,7 +6,7 @@ import {
   authUsers,
   users,
 } from './auth'
-import { postRevisions, posts } from './posts'
+import { mediaAssets, postRevisions, posts } from './posts'
 
 export * from './auth'
 export * from './posts'
@@ -17,6 +17,7 @@ export const relations = defineRelations(
     authSessions,
     authUserRoles,
     authUsers,
+    mediaAssets,
     postRevisions,
     posts,
     users,
