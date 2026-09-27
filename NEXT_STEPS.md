@@ -1,5 +1,202 @@
 # Next steps
 
+## Current handoff
+
+Work locally until CI/CD is established. Do not repeatedly deploy incomplete
+media changes by hand.
+
+- The unified Fly deployment foundation is committed as `ec15c7a` (`Deploy
+  unified application to Fly`). It runs Caddy, GraphQL, public, and admin in one
+  `1gb` Machine supervised by PM2.
+- Fly release `v4` is the current healthy release. A later media image was
+  pushed as release `v5`, but it remained `pending` and had not replaced the
+  Machine when this handoff was written. Check release state before any future
+  deployment; do not create duplicate releases merely because one is pending.
+- A public Tigris bucket named `blog-for-fun-media` exists and its S3-compatible
+  credentials are attached to the Fly app as secrets. Never add those values to
+  source control or logs.
+- Authentication runbook documentation and generic failed-login service error
+  handling are implemented locally but uncommitted.
+- Media database, GraphQL, storage, and admin-picker changes are implemented
+  locally but uncommitted and are not yet a complete, production-safe slice.
+- The last completed local checks passed: Biome, server TypeScript, admin
+  typecheck/Relay generation, Fly config validation, and the production image
+  build. Run the full test suite again after finishing the media behavior.
+
+## Media library
+
+### Target behavior
+
+- Treat media as a site-wide library, similar to WordPress. Add a dedicated
+  authenticated `/admin/media` page and a top-level Media navigation item next
+  to Posts. The page owns upload, browsing, search, metadata editing, and safe
+  deletion workflows.
+- Keep every `MediaAsset` globally reusable. Add an optional
+  `attached_post_id` relation recording the post from which an asset was first
+  uploaded. Uploading from a post editor sets that post ID; uploading from the
+  Media page leaves it null. Attachment records origin/context, not exclusive
+  ownership, and deleting a post must not delete its attached assets.
+- Track attachment separately from usage. An asset attached to one post can be
+  embedded in other posts or selected as their featured image. Before deleting
+  an asset, detect all Markdown embeds and featured-image references.
+- Replace the full inline library currently shown below every post editor with a
+  compact Add media action. It should open a reusable picker backed by the same
+  global library, allow upload in the current post context, and insert the
+  selected asset at the current MDXEditor selection.
+- Persist asset identity in post content rather than a Tigris/provider URL. Use
+  standard Markdown with a stable asset route:
+  `![alt text](/media/<asset-id> "Optional caption")`. Resolve the asset ID at
+  request/render time and keep provider URLs out of authored content. This
+  preserves native Markdown/MDXEditor image support while allowing storage
+  migration and metadata updates without rewriting every post.
+- Keep per-asset metadata such as filename, MIME type, dimensions, and default
+  alt text on `MediaAsset`. Keep per-embed alt text in the Markdown image text
+  and use the optional Markdown image title as its caption when those values
+  differ by post.
+
+### Implemented locally
+
+- Added the `media_assets` table and nullable `posts.featured_media_id` schema,
+  plus migration `server/migrations/20260927002621_media-assets/`.
+- Added administrator `media:read` and `media:write` permissions.
+- Added protected GraphQL `mediaAssets` and `createMediaUpload` operations.
+- Added Tigris S3 client and pre-signed `PUT` URLs. Uploads currently accept
+  AVIF, GIF, JPEG, PNG, and WebP up to 10 MB.
+- Added `storage:configure-cors`, allowing `PUT` from local admin development
+  and `https://blog-for-fun.fly.dev`.
+- Added a Fly release command that runs database migrations and configures
+  bucket CORS before replacing the application Machine. Keep this behavior in
+  the eventual CI/CD deployment workflow.
+- Added an initial media grid to the post editor. It can select a local image,
+  request an upload URL, upload directly to Tigris, and insert standard Markdown
+  image syntax at the current MDXEditor selection. Existing assets can also be
+  inserted, and the image plugin renders Markdown images inside the visual
+  editor.
+- Upload controls collect and validate explicit alt text through React Hook Form;
+  the filename is only used as an editable initial suggestion.
+- Added a local `s3rver` development command and CORS configuration so media can
+  be tested without production Tigris credentials. The storage client supports
+  configurable path-style endpoints, public URL bases, and object ACLs while
+  retaining Tigris defaults in production.
+- The current inline grid and direct Markdown URL insertion are prototypes to be
+  replaced by the shared Media page/picker and ID-based embed syntax described
+  above.
+
+### Verified locally
+
+- Applied all migrations to an isolated local libSQL database and bootstrapped a
+  disposable administrator without using the remote Turso database.
+- Verified GraphQL health, public SSR, admin login, authenticated admin routes,
+  media authorization, signed upload creation, browser-upload CORS, object
+  upload, public object retrieval, and media-library listing.
+- Verified Biome, admin production build, TypeScript, migration history, and all
+  17 server tests. Manual browser verification of the editor interaction remains
+  before committing the media slice.
+
+### Finish before considering uploads complete
+
+1. Fix the upload lifecycle. `createMediaUpload` currently inserts a database
+   row before the browser uploads the object, so failed or abandoned uploads
+   leave broken assets. Prefer a prepare/finalize flow: reserve the object key
+   and issue the signed URL, upload it, then finalize only after the server
+   verifies the object with `HeadObject`. Alternatively persist an explicit
+   pending state and clean stale rows/objects in bounded batches.
+2. Do not trust the browser-provided MIME type, size, or extension as proof of
+   image content. On finalization, verify object metadata and decode or inspect
+   the file signature before making the asset available. Define how malformed
+   objects are deleted.
+3. Add an explicit decorative-image option before allowing empty alt text.
+4. Add loading, upload-progress, success, retry, and accessible error
+   states. Disable duplicate submissions and handle Relay/GraphQL errors without
+   leaving the UI stuck.
+5. Add pagination to `mediaAssets`; do not load an unbounded library in every
+   post editor query. Add search or filtering when the library grows.
+6. Add update-alt-text and delete workflows. Deletion must detect post usage,
+   avoid breaking published content, remove the Tigris object safely, and handle
+   partial storage/database failure.
+7. Decide the stable delivery URL before publishing media broadly. The current
+   API returns a direct Tigris bucket URL, while the intended design called for
+   stable `/media/:id` URLs or a custom asset domain. Implement ID-based embeds
+   and avoid persisting provider URLs in Markdown.
+8. Add service and GraphQL tests for authorization, allowed types, size limits,
+   filename normalization, ordering, missing storage configuration, signed URL
+   generation, finalization, stale uploads, and anonymous access rejection.
+9. Add browser tests covering upload, library refresh, insertion at the cursor,
+   saving a post, reloading it, and rendering the image publicly.
+
+### Featured and captioned images
+
+1. Support one optional featured `MediaAsset` per post. Add a per-post
+   presentation enum with `TITLE_ADJACENT` and `HERO` values; the setting only
+   applies when a featured asset is selected.
+2. Expose `featuredMedia` and `featuredMediaLayout` on `Post`, and
+   `featuredMediaId` plus `featuredMediaLayout` on `PutPostInput`.
+3. Resolve the featured asset efficiently and validate that a selected asset
+   exists and is finalized before saving the post.
+4. Include featured asset and layout changes in revision detection. Store
+   `featured_media_id` and `featured_media_layout` on post revisions so
+   restoration cannot silently lose, retain, or reposition the wrong image.
+5. Add a featured-image picker, preview, replacement, clear action, and layout
+   selector to the admin editor using React Hook Form and the reusable global
+   Media picker. Uploads initiated there attach to the current post.
+6. On public post details, render `TITLE_ADJACENT` media as part of the title
+   composition and `HERO` media as a full-width lead image. Define responsive
+   mobile behavior for both rather than forcing the desktop composition into a
+   narrow viewport.
+7. Render featured thumbnails or title-adjacent media consistently on public
+   post lists. Include intrinsic dimensions, responsive sources/sizing, loading
+   policy, and the selected asset in Open Graph/Twitter metadata.
+8. Define caption syntax that remains valid Markdown. Implement parsing and
+   rendering as semantic `figure`, `img`, and `figcaption` elements without
+   allowing unsafe HTML.
+9. Style featured and inline figures for mobile, desktop, light, and dark themes;
+   preserve reduced-motion behavior and avoid layout shift.
+10. Add public rendering tests for ordinary images, captioned images, decorative
+    images, malformed syntax, both featured layouts, responsive behavior, and
+    featured-image metadata.
+
+### Shared admin library
+
+1. Add nullable `attached_post_id`, image dimensions, and any finalized/upload
+   status needed by the safe upload lifecycle to `media_assets` in a new
+   forward-only migration.
+2. Extend upload input with optional `attachedPostId`; authorize and validate the
+   post before attaching it. Preserve assets when an attached post is deleted by
+   setting the relation to null.
+3. Add a paginated administrator media connection with search/filter support and
+   fields for attachment, usage, dimensions, upload status, and metadata.
+4. Add `/admin/media`, navigation adjacent to Posts, and reusable Media library
+   components for grid/list browsing, uploading, selection, metadata editing,
+   and safe deletion.
+5. Reuse the same picker in the post editor. Opening it from a post supplies the
+   post ID to uploads but does not filter the library to that post.
+6. Replace provider-URL insertion with
+   `![alt](/media/<asset-id> "Optional caption")`. Keep MDXEditor's native image
+   representation and add picker fields for per-embed alt text and caption.
+7. Add a public `/media/:id` resource route that resolves the asset to storage
+   without exposing provider identity in authored content. Add Markdown rendering
+   that treats the optional image title as a caption and emits semantic
+   `figure`/`img`/`figcaption` markup while handling missing assets safely.
+8. Add tests proving global reuse, attachment nulling on post deletion, usage
+   detection, picker behavior, stable image URL round-tripping, captions, and
+   public rendering.
+
+### Local media verification
+
+1. Use a local Turso/libSQL database with all committed migrations applied.
+2. For isolated local storage, create `server/.local/media`, run
+   `pnpm --filter server storage:dev`, and configure the GraphQL process with the
+   local S3 endpoint, path-style access, public media URL, and disposable S3
+   credentials. Use Tigris credentials only when explicitly testing Tigris.
+3. When testing Tigris, run `pnpm --filter server storage:configure-cors` once
+   for the intended local admin origin after confirming the bucket and account.
+4. Bootstrap the local administrator with `pnpm --filter server auth:bootstrap`.
+5. Start the GraphQL, public, and admin applications and exercise the workflow
+   through the same-origin admin GraphQL proxy.
+6. Verify that unauthorized media queries and mutations fail, valid uploads can
+   be fetched from the public URL, failed uploads do not appear in the library,
+   and saved Markdown survives reload.
+
 ## Authentication security roadmap
 
 The application-owned session boundary is implemented. The following security
@@ -7,6 +204,17 @@ work remains, ordered by priority.
 
 ### High priority
 
+- Bootstrap the first production administrator after deployment. Open a
+  production console with `fly ssh console --app blog-for-fun`, then run
+  `BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_DISPLAY_NAME='Blog Administrator' pnpm --filter server auth:bootstrap` and enter a password at the prompt.
+  The command deliberately refuses to run when any authentication user already
+  exists. Do not pass `BOOTSTRAP_PASSWORD` on a command line, where it could be
+  retained in shell history or process inspection.
+- Add a tested administrator password-recovery command before exposing any
+  password-reset link. It should be invoked through a controlled Fly console,
+  validate the replacement password, update `password_changed_at`, revoke all
+  sessions, and write an audit event. A public email reset flow needs dedicated
+  token storage, expiry, rate limits, delivery, and anti-enumeration controls.
 - Make GraphQL authorization fail closed for mutations through middleware, a
   schema directive, or an explicit mutation policy registry. Require every
   mutation to declare either a permission or an intentionally public policy;
@@ -17,10 +225,6 @@ work remains, ordered by priority.
 - Add structured mutation auditing at the GraphQL boundary. Record the actor,
   operation, affected entity, outcome, and request correlation data without
   storing request bodies, passwords, session tokens, or post content.
-- Add a tested administrator password-recovery command. It must validate a new
-  password, update `password_changed_at`, revoke every existing session, and
-  write an audit event. Document how access to this operational command is
-  restricted and recovered.
 
 ### Persistent throttling
 
@@ -92,11 +296,52 @@ Required behavior:
 Continue using established password hashing, session, CSRF, and cookie libraries
 rather than implementing cryptographic primitives directly.
 
+## Environment and secrets
+
+- Replace direct `dotenv` loading with dotenvx. Prefer invoking development,
+  migration, bootstrap, storage, test, and other environment-dependent commands
+  through `dotenvx run --` so configuration is loaded at the process boundary
+  rather than through application imports.
+- Inventory the environment variables required by each workspace and document
+  safe local examples without real credentials. Validate required variables at
+  startup with clear errors.
+- Decide whether to commit dotenvx-encrypted environment files or keep local
+  files ignored. If encrypted files are committed, keep decryption keys outside
+  the repository and provide them only through approved developer and CI secret
+  stores.
+- Do not replace Fly secrets with dotenvx files in production. Continue injecting
+  Turso, Tigris, and other production credentials through Fly or the CI deployment
+  environment, and never bake secrets into the Docker image.
+- Update package scripts, Docker/CI commands, documentation, and tests together,
+  then remove the direct `dotenv` dependency and `config()` call after every
+  supported command works through dotenvx.
+
 ## Set up CI/CD to run tests
 
-We want tp run tests in GitHub.
+Prefer GitHub Actions unless CircleCI provides a concrete required capability.
 
-Let's also see about running a review agent depending on cost.  We care about semantic coding styles so we can review PRs more easily.
+- On pull requests, use a frozen pnpm install and run code generation, Biome,
+  server tests, all workspace typechecks, production builds, and migration
+  history validation.
+- Add isolated integration tests using a temporary local libSQL database. Do not
+  run tests against production Turso or Tigris resources.
+- Add browser tests for authentication, post editing/publication, and media
+  upload/insertion. Use dedicated test storage or an S3-compatible local service
+  with deterministic cleanup.
+- Build the Docker image in CI and smoke-test `/health`, `/`, and `/admin/`
+  before publishing it.
+- Deploy only from the protected main branch after required checks pass. Use
+  GitHub/Fly secrets, a concurrency group to prevent overlapping releases, and
+  Fly's release command for forward-only migrations and storage configuration.
+- Verify Fly Machine health and the public/admin endpoints after deployment. Do
+  not automatically roll back a database migration; deploy a forward fix.
+- Add a manual production administrator bootstrap/recovery job only if it can
+  require protected-environment approval and avoid passwords in arguments,
+  logs, workflow inputs, and shell history. Otherwise retain the controlled Fly
+  console procedure.
+- Evaluate an automated review agent only after estimating cost. Reviews should
+  prioritize correctness, security, migration safety, accessibility, and the
+  semantic styling conventions in this document.
 
 ## Set up the admin UI
 
