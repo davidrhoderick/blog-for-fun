@@ -25,14 +25,16 @@ type Mutation {
   publishPost(id: ID!, publishedAt: DateTimeISO): Post!
   unpublishPost(id: ID!): Post!
   deletePost(id: ID!): DeletedEntity
-  createMediaUpload(input: CreateMediaUploadInput!): MediaUpload!
+  prepareMediaUpload(input: PrepareMediaUploadInput!): MediaUpload!
+  finalizeMediaUpload(id: ID!): MediaAsset!
 }
 
-input CreateMediaUploadInput {
+input PrepareMediaUploadInput {
   filename: NonEmptyString!
   contentType: NonEmptyString!
   size: Int!
   altText: String!
+  attachedPostId: ID
 }
 
 type MediaUpload {
@@ -46,8 +48,18 @@ type MediaAsset implements Entity {
   contentType: NonEmptyString!
   size: Int!
   altText: String!
+  status: MediaAssetStatus!
+  attachedPostId: ID
+  width: Int
+  height: Int
+  finalizedAt: DateTimeISO
   url: String!
   createdAt: DateTimeISO!
+}
+
+enum MediaAssetStatus {
+  PENDING
+  READY
 }
 
 input PutPostInput {

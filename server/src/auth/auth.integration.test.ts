@@ -201,6 +201,29 @@ test('public reads remain open while anonymous and roleless writes fail', async 
     anonymousPublish.errors?.[0]?.extensions?.code,
     'UNAUTHENTICATED',
   )
+  const anonymousMediaUpload = await responseJson(
+    await graphql(
+      `mutation {
+        prepareMediaUpload(input: {
+          filename: "image.png"
+          contentType: "image/png"
+          size: 100
+          altText: "Image"
+        }) { uploadUrl }
+      }`,
+    ),
+  )
+  assert.equal(
+    anonymousMediaUpload.errors?.[0]?.extensions?.code,
+    'UNAUTHENTICATED',
+  )
+  const anonymousMediaFinalize = await responseJson(
+    await graphql('mutation { finalizeMediaUpload(id: "missing") { id } }'),
+  )
+  assert.equal(
+    anonymousMediaFinalize.errors?.[0]?.extensions?.code,
+    'UNAUTHENTICATED',
+  )
 
   const rolelessUserId = crypto.randomUUID()
   await db.insert(authUsers).values({ id: rolelessUserId })

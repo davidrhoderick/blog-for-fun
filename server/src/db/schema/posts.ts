@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  type AnySQLiteColumn,
   index,
   integer,
   sqliteTable,
@@ -17,7 +18,7 @@ export const posts = sqliteTable(
     title: text('title').notNull(),
     markdownContent: text('markdown_content').notNull(),
     featuredMediaId: text('featured_media_id').references(
-      () => mediaAssets.id,
+      (): AnySQLiteColumn => mediaAssets.id,
       {
         onDelete: 'set null',
       },
@@ -50,11 +51,30 @@ export const mediaAssets = sqliteTable(
     contentType: text('content_type').notNull(),
     size: integer('size').notNull(),
     altText: text('alt_text').notNull(),
+    status: text('status', { enum: ['pending', 'ready'] })
+      .notNull()
+      .default('pending'),
+    attachedPostId: text('attached_post_id').references(
+      (): AnySQLiteColumn => posts.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    width: integer('width'),
+    height: integer('height'),
+    finalizedAt: integer('finalized_at', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (table) => [uniqueIndex('media_assets_object_key_idx').on(table.objectKey)],
+  (table) => [
+    uniqueIndex('media_assets_object_key_idx').on(table.objectKey),
+    index('media_assets_status_created_at_idx').on(
+      table.status,
+      table.createdAt,
+    ),
+    index('media_assets_attached_post_id_idx').on(table.attachedPostId),
+  ],
 )
 
 export const postRevisions = sqliteTable(

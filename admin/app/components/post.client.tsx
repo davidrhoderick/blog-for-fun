@@ -29,7 +29,8 @@ import {
   useLazyLoadQuery,
   useRelayEnvironment,
 } from 'react-relay'
-import type { PostEditorCreateMediaUploadMutation } from '../__generated__/PostEditorCreateMediaUploadMutation.graphql'
+import type { PostEditorFinalizeMediaUploadMutation } from '../__generated__/PostEditorFinalizeMediaUploadMutation.graphql'
+import type { PostEditorPrepareMediaUploadMutation } from '../__generated__/PostEditorPrepareMediaUploadMutation.graphql'
 import type { PostEditorPublishMutation } from '../__generated__/PostEditorPublishMutation.graphql'
 import type { PostEditorQuery } from '../__generated__/PostEditorQuery.graphql'
 import type { PostEditorSaveMutation } from '../__generated__/PostEditorSaveMutation.graphql'
@@ -94,11 +95,22 @@ const unpublishPostMutation = graphql`
   }
 `
 
-const createMediaUploadMutation = graphql`
-  mutation PostEditorCreateMediaUploadMutation($input: CreateMediaUploadInput!) {
-    createMediaUpload(input: $input) {
-      asset { id filename altText url }
+const prepareMediaUploadMutation = graphql`
+  mutation PostEditorPrepareMediaUploadMutation($input: PrepareMediaUploadInput!) {
+    prepareMediaUpload(input: $input) {
+      asset { id }
       uploadUrl
+    }
+  }
+`
+
+const finalizeMediaUploadMutation = graphql`
+  mutation PostEditorFinalizeMediaUploadMutation($id: ID!) {
+    finalizeMediaUpload(id: $id) {
+      id
+      filename
+      altText
+      url
     }
   }
 `
@@ -184,32 +196,46 @@ const PostEditorForm = ({
 
     setIsUploading(true)
     setUploadError(null)
-    commitMutation<PostEditorCreateMediaUploadMutation>(environment, {
-      mutation: createMediaUploadMutation,
+    commitMutation<PostEditorPrepareMediaUploadMutation>(environment, {
+      mutation: prepareMediaUploadMutation,
       variables: {
         input: {
           filename: uploadFile.name,
           contentType: uploadFile.type,
           size: uploadFile.size,
           altText: altText.trim(),
+          attachedPostId: id,
         },
       },
-      onCompleted: async ({ createMediaUpload }) => {
+      onCompleted: async ({ prepareMediaUpload }) => {
         try {
-          const response = await fetch(createMediaUpload.uploadUrl, {
+          const response = await fetch(prepareMediaUpload.uploadUrl, {
             method: 'PUT',
             headers: { 'content-type': uploadFile.type },
             body: uploadFile,
           })
           if (!response.ok) throw new Error('Upload failed')
-          setMediaAssets((assets) => [createMediaUpload.asset, ...assets])
-          insertImage(createMediaUpload.asset)
-          setUploadFile(null)
-          mediaUploadForm.reset()
+
+          commitMutation<PostEditorFinalizeMediaUploadMutation>(environment, {
+            mutation: finalizeMediaUploadMutation,
+            variables: { id: prepareMediaUpload.asset.id },
+            onCompleted: ({ finalizeMediaUpload }) => {
+              setMediaAssets((assets) => [finalizeMediaUpload, ...assets])
+              insertImage(finalizeMediaUpload)
+              setUploadFile(null)
+              setIsUploading(false)
+              mediaUploadForm.reset()
+            },
+            onError: () => {
+              setIsUploading(false)
+              setUploadError(
+                'The uploaded image could not be verified. Please try again.',
+              )
+            },
+          })
         } catch {
-          setUploadError('The image could not be uploaded. Please try again.')
-        } finally {
           setIsUploading(false)
+          setUploadError('The image could not be uploaded. Please try again.')
         }
       },
       onError: () => {

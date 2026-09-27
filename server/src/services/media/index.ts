@@ -1,13 +1,15 @@
 import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
   PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { desc } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { GraphQLError } from 'graphql'
 import { db } from '../../db'
-import { mediaAssets } from '../../db/schema'
+import { mediaAssets, posts } from '../../db/schema'
 import type { MediaAsset } from '../../schema/types.generated'
 
 const allowedContentTypes = new Set([
@@ -55,20 +57,30 @@ const toMediaAsset = (asset: typeof mediaAssets.$inferSelect): MediaAsset => ({
   contentType: asset.contentType,
   size: asset.size,
   altText: asset.altText,
+  status: asset.status === 'ready' ? 'READY' : 'PENDING',
+  attachedPostId: asset.attachedPostId,
+  width: asset.width,
+  height: asset.height,
+  finalizedAt: asset.finalizedAt,
   url: publicUrl(asset.objectKey),
   createdAt: asset.createdAt,
 })
 
 export const getMediaAssets = async () =>
   (
-    await db.select().from(mediaAssets).orderBy(desc(mediaAssets.createdAt))
+    await db
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.status, 'ready'))
+      .orderBy(desc(mediaAssets.createdAt))
   ).map(toMediaAsset)
 
-export const createMediaUpload = async (input: {
+export const prepareMediaUpload = async (input: {
   filename: string
   contentType: string
   size: number
   altText: string
+  attachedPostId?: string | null
 }) => {
   if (
     !allowedContentTypes.has(input.contentType) ||
@@ -83,16 +95,6 @@ export const createMediaUpload = async (input: {
 
   const id = crypto.randomUUID()
   const objectKey = `media/${id}/${filename}`
-  const [asset] = await db
-    .insert(mediaAssets)
-    .values({
-      id,
-      objectKey,
-      ...input,
-      filename,
-      altText: input.altText.trim(),
-    })
-    .returning()
   const { bucket, client } = storage()
   const uploadUrl = await getSignedUrl(
     client,
@@ -106,8 +108,68 @@ export const createMediaUpload = async (input: {
     }),
     { expiresIn: 300 },
   )
+  if (input.attachedPostId) {
+    const [post] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(eq(posts.id, input.attachedPostId))
+      .limit(1)
+    if (!post) throw new GraphQLError('Attached post not found')
+  }
+
+  const [asset] = await db
+    .insert(mediaAssets)
+    .values({
+      id,
+      objectKey,
+      filename,
+      contentType: input.contentType,
+      size: input.size,
+      altText: input.altText.trim(),
+      attachedPostId: input.attachedPostId,
+    })
+    .returning()
 
   return { asset: toMediaAsset(asset), uploadUrl }
+}
+
+export const finalizeMediaUpload = async (id: string) => {
+  const [asset] = await db
+    .select()
+    .from(mediaAssets)
+    .where(eq(mediaAssets.id, id))
+    .limit(1)
+  if (!asset) throw new GraphQLError('Media upload not found')
+  if (asset.status === 'ready') return toMediaAsset(asset)
+
+  const { bucket, client } = storage()
+  let object: { ContentLength?: number; ContentType?: string }
+  try {
+    object = await client.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
+    )
+  } catch {
+    throw new GraphQLError('Uploaded object could not be verified')
+  }
+
+  if (
+    object.ContentLength !== asset.size ||
+    object.ContentType !== asset.contentType
+  ) {
+    await client.send(
+      new DeleteObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
+    )
+    await db.delete(mediaAssets).where(eq(mediaAssets.id, id))
+    throw new GraphQLError('Uploaded object does not match its metadata')
+  }
+
+  const [finalizedAsset] = await db
+    .update(mediaAssets)
+    .set({ status: 'ready', finalizedAt: new Date() })
+    .where(eq(mediaAssets.id, id))
+    .returning()
+
+  return toMediaAsset(finalizedAsset)
 }
 
 export const configureMediaCors = async () => {

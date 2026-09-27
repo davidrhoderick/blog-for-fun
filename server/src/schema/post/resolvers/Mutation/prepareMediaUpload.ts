@@ -1,10 +1,10 @@
 import { requirePermission } from '../../../../auth/authorization'
-import { createMediaUpload as createUpload } from '../../../../services/media'
+import { prepareMediaUpload as prepareUpload } from '../../../../services/media'
 import type { MutationResolvers } from '../../../types.generated'
 
-export const createMediaUpload: NonNullable<
-  MutationResolvers['createMediaUpload']
+export const prepareMediaUpload: NonNullable<
+  MutationResolvers['prepareMediaUpload']
 > = (_parent, { input }, context) => {
   requirePermission(context, 'media:write')
-  return createUpload(input)
+  return prepareUpload(input)
 }

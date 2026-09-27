@@ -66,7 +66,15 @@ export const relations = defineRelations(
       }),
     },
     posts: {
+      attachedMedia: r.many.mediaAssets(),
       revisions: r.many.postRevisions(),
+    },
+    mediaAssets: {
+      attachedPost: r.one.posts({
+        from: r.mediaAssets.attachedPostId,
+        to: r.posts.id,
+        optional: true,
+      }),
     },
     postRevisions: {
       post: r.one.posts({
