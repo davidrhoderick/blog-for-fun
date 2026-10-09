@@ -180,6 +180,8 @@ Flow:
    answer and a confidence.
 4. Print `question: answer (confidence)` lines plus an overall verdict.
 
+**Verdict:** the review fails if any rubric question fails with high confidence.
+
 The rubric (initial):
 
 **Backend**
@@ -244,16 +246,17 @@ Each deterministic rule gets a passing and a failing fixture so the guardrails
 are themselves tested (ts-arch rule fixtures; a self-check in the AST script).
 The Jev harness gets a smoke run against a known diff.
 
-## Open questions
+## Resolved decisions
 
-1. **Apollo vs Relay.** The rule was described in terms of an "Apollo context",
-   but this repo uses **Relay** (no Apollo references). This design targets the
-   Relay/GraphQL client layer; confirm that matches intent.
-2. **Complexity metric.** The requested "cyclomatic complexity 20" is
-   implemented as Biome's *cognitive* complexity = 20, because Biome has no
-   pure cyclomatic rule. Confirm 20 cognitive is acceptable.
-3. **Verdict semantics.** How should per-question answers and confidences combine
-   into the overall verdict (e.g. any high-confidence failure = fail)?
-4. **Bug-fix note (unrelated).** The `.opencode/plugin/biome-after-task.ts`
-   plugin was broken by the OpenCode V1→V2 upgrade (not by superpowers) and has
-   been ported to the V2 API.
+1. **GraphQL client layer: Relay.** Confirmed — this repo uses Relay; the
+   frontend server-state rule targets the Relay client layer, not Apollo.
+2. **Complexity metric: cognitive.** "Cyclomatic complexity 20" is implemented
+   as Biome *cognitive* complexity = 20.
+3. **Verdict semantics.** The review fails if any rubric question fails with
+   high confidence.
+
+## Notes
+
+- **Bug-fix (unrelated).** The `.opencode/plugin/biome-after-task.ts` plugin was
+  broken by the OpenCode V1→V2 upgrade (not by superpowers) and has been ported
+  to the V2 API.
