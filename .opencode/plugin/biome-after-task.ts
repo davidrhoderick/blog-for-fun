@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { Plugin } from '@opencode-ai/plugin'
+import type { Plugin } from '@opencode/plugin'
 
 const execFileAsync = promisify(execFile)
 
@@ -17,51 +17,56 @@ const getWorktreeStatus = async (directory: string) => {
   }
 }
 
-export default (async ({ client, directory }) => {
-  const pendingSessions = new Set<string>()
-  const worktreeStatusBySession = new Map<string, string | null>()
+export default {
+  id: 'biome-after-task',
+  async setup(ctx: Plugin.Context) {
+    const directory = ctx.location.directory
+    const pendingSessions = new Set<string>()
+    const worktreeStatusBySession = new Map<string, string | null>()
+    const controller = new AbortController()
 
-  return {
-    'chat.message': async (input, output) => {
-      const isFollowUp = output.parts.some(
-        (part) => part.type === 'text' && part.text === followUp,
-      )
-
-      if (!isFollowUp) {
-        worktreeStatusBySession.set(
-          input.sessionID,
-          await getWorktreeStatus(directory),
-        )
-        pendingSessions.add(input.sessionID)
-      }
-    },
-    event: async ({ event }) => {
-      if (
-        event.type !== 'session.idle' ||
-        !pendingSessions.delete(event.properties.sessionID)
-      ) {
+    await ctx.session.hook('prompt', async (event) => {
+      if (event.prompt.text === followUp) {
         return
       }
 
-      const previousStatus = worktreeStatusBySession.get(
-        event.properties.sessionID,
+      worktreeStatusBySession.set(
+        event.sessionID,
+        await getWorktreeStatus(directory),
       )
-      worktreeStatusBySession.delete(event.properties.sessionID)
-      const currentStatus = await getWorktreeStatus(directory)
+      pendingSessions.add(event.sessionID)
+    })
 
-      if (
-        previousStatus !== null &&
-        currentStatus !== null &&
-        previousStatus === currentStatus
-      ) {
-        return
+    void (async () => {
+      for await (const event of ctx.event.subscribe({
+        signal: controller.signal,
+      })) {
+        if (
+          event.type !== 'session.idle' ||
+          !pendingSessions.delete(event.data.sessionID)
+        ) {
+          continue
+        }
+
+        const previousStatus = worktreeStatusBySession.get(event.data.sessionID)
+        worktreeStatusBySession.delete(event.data.sessionID)
+        const currentStatus = await getWorktreeStatus(directory)
+
+        if (
+          previousStatus !== null &&
+          currentStatus !== null &&
+          previousStatus === currentStatus
+        ) {
+          continue
+        }
+
+        await ctx.session.prompt({
+          sessionID: event.data.sessionID,
+          text: followUp,
+        })
       }
+    })()
 
-      await client.session.promptAsync({
-        path: { id: event.properties.sessionID },
-        query: { directory },
-        body: { parts: [{ type: 'text', text: followUp }] },
-      })
-    },
-  }
-}) satisfies Plugin
+    return () => controller.abort()
+  },
+} satisfies Plugin.Plugin
