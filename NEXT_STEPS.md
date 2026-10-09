@@ -15,8 +15,10 @@ media changes by hand.
 - A public Tigris bucket named `blog-for-fun-media` exists and its S3-compatible
   credentials are attached to the Fly app as secrets. Never add those values to
   source control or logs.
-- Authentication runbook documentation and generic failed-login service error
-  handling are implemented locally but uncommitted.
+- Generic failed-login error handling is committed (introduced in `ad9b379`).
+  Operational steps stay in this document rather than a separate runbook, so
+  there is one source of truth. A tested administrator password-recovery command
+  is still outstanding.
 - The initial media upload foundation is committed as `f522058`; the safer
   prepare/finalize lifecycle and attachment-context work is committed as
   `221926e`.
