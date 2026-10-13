@@ -58,9 +58,10 @@ report that informs fixes. Enforcement is via the `biome-after-task` plugin
 
 ## Test runner: Vitest everywhere
 
-Migrate `server` and `admin` from `tsx --test` to **Vitest**. One runner, two
-environments via Vitest projects: `node` for `server`/`packages`, `jsdom` (+
-React Testing Library) for `admin`. Coverage via `@vitest/coverage-v8`.
+Migrate `server`, `admin`, and `blog` (renamed from `public`) from `tsx --test`
+to **Vitest**. One runner, two environments via Vitest projects: `node` for
+`server`/`packages`, `jsdom` (+ React Testing Library) for `admin` and `blog`.
+Coverage via `@vitest/coverage-v8`.
 
 Rationale: admin already runs on Vite; one runner removes a second mental model;
 coverage thresholds are built in and more mature than Node's experimental
@@ -83,7 +84,7 @@ coverage thresholds are built in and more mature than Node's experimental
 | audit | `pnpm audit` | — | known CVEs, instant |
 | lint | Biome | MIT | lineWidth 80; `noExcessiveCognitiveComplexity` = 20; `noExcessiveNestedCallbacks` |
 | structure | AST check | in-repo | file ≤ 400 LOC; function ≤ 80 LOC; nesting ≤ 4 |
-| structure | GritQL plugin | in-repo | no JSX produced inside `useMemo`/`useCallback` (admin) |
+| structure | GritQL plugin | in-repo | no JSX produced inside `useMemo`/`useCallback` (admin, blog) |
 | test | Vitest | MIT | coverage floor 80% |
 | scans | osv-scanner | Apache-2.0 | lockfile CVEs + known-malicious feed |
 | scans | Opengrep | LGPL-2.1 | SAST (fully-OSS rules, unlike Semgrep CE's registry rules) |
@@ -139,11 +140,37 @@ to fix, and the bounded retry still applies.
 ## Bounded-retry enforcement
 
 - The pipeline runs after a task. On red, the agent fixes and re-runs.
-- **3 automatic attempts.** On exhaustion, stop and ask the user.
-- User says "keep going" → **+2** attempts; next exhaustion → **+1**; afterwards
-  it asks each time. Or the user gives specific instructions, which the agent
-  applies before the next run.
-- Attempt count is per-session, held in the plugin's storage. No infinite loop.
+- **Initial budget: 3 automatic attempts.** On exhaustion, the agent stops and
+  asks the user via the native **`question` tool** (multiple choice):
+
+  > Pipeline still failing. How do you want to proceed?
+  > - **Try again (3 attempts)** — decrements to **(2 attempts)**, then **(1 attempt)**, then stays at **(1 attempt)** forever
+  > - **Give other instructions** — always present; the user types guidance the agent applies before the next run
+
+- The "Try again" grant is the ladder **3 → 2 → 1 → 1 → 1 …** (never reaches 0).
+- Attempt count is per-session, held by the pipeline runner. No infinite loop.
+- "Give other instructions" does not reset the ladder; the agent applies the
+  guidance and runs again within the current grant.
+
+## Repo structure
+
+Conventional monorepo split, adopted before the pipeline so all paths are final:
+
+```
+apps/         # deployable applications
+  admin/
+  blog/       # renamed from public/ (the public blog site)
+  server/     # GraphQL API
+packages/     # shared libraries (existing: ui, graphql-runtime)
+trust-pipeline/   # the engine (below)
+```
+
+The rename/move is mechanical: `pnpm-workspace.yaml`, the root `Dockerfile`
+(two `COPY` lines + one `--filter public`), `docker/ecosystem.config.cjs` (pm2
+name + `cwd`), and `public/package.json`'s name. `docker/Caddyfile` routes by
+port and workspace imports use package names, so neither changes. The standalone
+`admin/Dockerfile` and `public/Dockerfile` are unused (Fly uses the root
+`Dockerfile`) and are deleted.
 
 ## Layout (as-if-portable, not tangled in app code)
 

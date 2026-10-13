@@ -17,7 +17,7 @@
 - Thresholds: line 80; function ≤ 80 LOC; file ≤ 400 LOC; nesting ≤ 4; cognitive complexity ≤ 20.
 - Coverage floor: **80% lines and branches**; per-file excludes; inline ignores require a reason.
 - One runner: **Vitest** (node project for `server`/`packages`, jsdom for `admin`).
-- Bounded retry: 3 attempts → ask the user → "keep going" grants +2 → then +1 → then ask each time.
+- Bounded retry: initial 3 attempts → then ask via the `question` tool; "Try again" grants **3 → 2 → 1 → 1 …** forever; "Give other instructions" always present.
 - Deterministic stages block the agent; the Jev review is a report.
 - Jev verdict: fails iff any rubric question fails with high confidence.
 - Exclude generated code: `*.generated.ts`, `admin/app/__generated__/**`.
@@ -30,8 +30,38 @@
 - **Fail-fast order**: a later stage must not run when an earlier one fails. Pinned in Phase 3.
 - **Structure check must ignore generated files** and not miscount multi-line signatures. Pinned in Phase 4.
 - **ts-arch must resolve workspace aliases** (`@blog/ui`) without false positives. Pinned in Phase 5.
-- **Retry must terminate**: after exhaustion it asks the user and never loops. Pinned in Phase 7.
+- **Retry must terminate the turn**: after exhaustion it asks the user via the `question` tool and never silently loops. Pinned in Phase 7.
 - **Verdict**: medium/low-confidence failures must not fail; empty diff passes. Pinned in Phase 6.
+
+---
+
+## Phase 0 — Restructure the workspace (session goal: "moved apps into apps/ and renamed public to blog")
+
+**Files:**
+- Modify: `pnpm-workspace.yaml`
+- Modify: `Dockerfile` (root)
+- Modify: `docker/ecosystem.config.cjs`
+- Modify: `public/package.json` (then move to `apps/blog/`)
+- Move: `admin/` → `apps/admin/`, `server/` → `apps/server/`, `public/` → `apps/blog/`
+- Delete: `admin/Dockerfile`, `public/Dockerfile` (unused; Fly uses the root `Dockerfile`)
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: the final paths every later phase assumes. Package names stay the same except `public` → `blog`.
+
+- [ ] **Step 1: Move directories** — `git mv admin apps/admin`, `git mv server apps/server`, `git mv public apps/blog` (create `apps/` first).
+- [ ] **Step 2: Rename the package** — `apps/blog/package.json` `"name": "public"` → `"name": "blog"`.
+- [ ] **Step 3: Update `pnpm-workspace.yaml`** — `apps/*` and `packages/*`.
+- [ ] **Step 4: Update the root `Dockerfile`** — the two `COPY` lines (`admin/…`, `public/…`) and `pnpm --filter public run build` → `--filter blog`.
+- [ ] **Step 5: Update `docker/ecosystem.config.cjs`** — pm2 name `'public'` → `'blog'`, `cwd: '/app/public'` → `'/app/apps/blog'`, and the other `cwd` paths to `/app/apps/{admin,server}`.
+- [ ] **Step 6: Reinstall and verify** — `pnpm install`, then `pnpm --filter blog build`, `pnpm --filter admin build`, `pnpm --filter server run dev:codegen` all succeed.
+- [ ] **Step 7: Verify deploy wiring** — `docker build` the root `Dockerfile` (or dry-run the COPY paths) to confirm no stale `public/` path remains. `grep -rn "public/" Dockerfile docker/` returns nothing.
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A
+git commit -m "refactor: move apps into apps/ and rename public to blog"
+```
 
 ---
 
@@ -64,23 +94,23 @@ git commit -m "docs: add rulebook, testing method, and AGENTS.md"
 
 **Files:**
 - Create: `vitest.config.ts` (root, with `test.projects`)
-- Create: `server/vitest.config.ts`, `admin/vitest.config.ts`
-- Modify: `package.json`, `server/package.json`, `admin/package.json`
+- Create: `apps/server/vitest.config.ts`, `apps/admin/vitest.config.ts`, `apps/blog/vitest.config.ts`
+- Modify: `package.json`, `apps/server/package.json`, `apps/admin/package.json`, `apps/blog/package.json`
 - Modify: existing `*.test.ts` imports if needed
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `pnpm test` → `vitest run`; `pnpm test:coverage` → coverage with the 80% floor. Projects: `server` (node), `admin` (jsdom).
+- Produces: `pnpm test` → `vitest run`; `pnpm test:coverage` → coverage with the 80% floor. Projects: `server` (node), `admin` and `blog` (jsdom).
 
-- [ ] **Step 1: Add deps** — `vitest`, `@vitest/coverage-v8` (root or per package); `jsdom`, `@testing-library/react` (admin).
-- [ ] **Step 2: Root config** `vitest.config.ts` with `test.projects` pointing at the two package configs and `coverage.thresholds = { lines: 80, branches: 80 }`.
-- [ ] **Step 3: Per-package configs** — `server` environment `node`; `admin` environment `jsdom`.
-- [ ] **Step 4: Port existing tests** — the four `server` tests and `admin` test run under Vitest unchanged (Node `node:test` imports replaced with Vitest `test`/`expect`).
-- [ ] **Step 5: Verify** — `pnpm test` passes for both projects; `pnpm test:coverage` produces a report and enforces the floor.
+- [ ] **Step 1: Add deps** — `vitest`, `@vitest/coverage-v8` (root or per package); `jsdom`, `@testing-library/react` (admin, blog).
+- [ ] **Step 2: Root config** `vitest.config.ts` with `test.projects` pointing at the three package configs and `coverage.thresholds = { lines: 80, branches: 80 }`.
+- [ ] **Step 3: Per-package configs** — `server` environment `node`; `admin` and `blog` environment `jsdom`.
+- [ ] **Step 4: Port existing tests** — the four `server` tests and the `admin` test run under Vitest unchanged (Node `node:test` imports replaced with Vitest `test`/`expect`). `blog` currently has no tests; add its config so new tests land there.
+- [ ] **Step 5: Verify** — `pnpm test` passes for all projects; `pnpm test:coverage` produces a report and enforces the floor.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add vitest.config.ts server admin package.json pnpm-lock.yaml
+git add vitest.config.ts apps package.json pnpm-lock.yaml
 git commit -m "test: migrate to vitest across the workspace"
 ```
 
@@ -142,7 +172,7 @@ git commit -m "feat(trust-pipeline): engine skeleton and fail-fast audit/lint/te
 - [ ] **Step 2: Run to verify they fail.**
 - [ ] **Step 3: Implement `checkSource`** with the TypeScript compiler API (function length = `getEndLineNumber - getStartLineNumber + 1`; nesting counts control-flow nodes; `IGNORE_GLOBS` short-circuit).
 - [ ] **Step 4: Run to verify they pass.**
-- [ ] **Step 5: Write the GritQL plugin** `no-jsx-in-memo.grit` (flag JSX produced inside `useMemo`/`useCallback`), wired in `biome.json` with `"includes": ["admin/**"]`.
+- [ ] **Step 5: Write the GritQL plugin** `no-jsx-in-memo.grit` (flag JSX produced inside `useMemo`/`useCallback`), wired in `biome.json` with `"includes": ["apps/admin/**", "apps/blog/**"]`.
 - [ ] **Step 6: Add `structure` stage tests** — a violating fixture makes the stage fail; a clean fixture passes; generated files ignored.
 - [ ] **Step 7: Wire the stage** into `run.ts` between `lint` and `test` (structure is part of the lint/structure step per the spec order).
 - [ ] **Step 8: Commit**
@@ -160,7 +190,7 @@ git commit -m "feat(trust-pipeline): AST size/nesting and JSX-in-memo checks"
 - Create: `trust-pipeline/engine/stages/scans.ts`
 - Create: `trust-pipeline/project/patterns/resolvers.test.ts`
 - Test: `trust-pipeline/engine/stages/scans.test.ts`
-- Modify: `trust-pipeline/project/config.ts`, `server/package.json` (add `ts-arch`), root `package.json`
+- Modify: `trust-pipeline/project/config.ts`, `apps/server/package.json` (add `ts-arch`), root `package.json`
 
 **Interfaces:**
 - Consumes: `ProjectConfig`; the `Stage` type.
@@ -176,7 +206,7 @@ git commit -m "feat(trust-pipeline): AST size/nesting and JSX-in-memo checks"
 - [ ] **Step 8: Commit**
 
 ```bash
-git add trust-pipeline/engine/stages/scans.ts trust-pipeline/project server/package.json package.json pnpm-lock.yaml
+git add trust-pipeline/engine/stages/scans.ts trust-pipeline/project apps/server/package.json package.json pnpm-lock.yaml
 git commit -m "feat(trust-pipeline): security/duplication scans and arch patterns"
 ```
 
@@ -227,14 +257,14 @@ git commit -m "feat(trust-pipeline): Jev judgment review"
 **Interfaces:**
 - Consumes: `pnpm verify` (Phases 3–6).
 - Produces:
-  - `export function nextBudget(current: number, attemptsMade: number): { budget: number; askUser: boolean }` implementing 3 → +2 → +1 → ask each time.
-  - plugin behavior: on task idle, if the worktree changed, send the pipeline follow-up; count failures in `ctx.storage`; on exhaustion, instruct the agent to stop and ask the user.
+  - `export function nextGrant(step: number): number` implementing the ladder **3 → 2 → 1 → 1 → 1 …** (never below 1).
+  - plugin behavior: on task idle, if the worktree changed, send the pipeline follow-up; count failed attempts in `ctx.storage`; after the initial 3, instruct the agent to stop and ask the user via the native **`question` tool** with two options — `Try again (N attempts)` where N = `nextGrant(step)`, and `Give other instructions` (always present).
 
-- [ ] **Step 1: Write failing retry tests** — 3 attempts then `askUser: true`; "keep going" grants 2 then 1 then 0.
+- [ ] **Step 1: Write failing retry tests** — `nextGrant` returns 3, 2, 1, 1, 1 for successive steps; never below 1.
 - [ ] **Step 2: Run to verify they fail.**
 - [ ] **Step 3: Implement `retry.ts`.**
 - [ ] **Step 4: Run to verify they pass.**
-- [ ] **Step 5: Rewrite the plugin** to run `pnpm verify` and apply `retry.ts`, keeping the existing worktree-change detection and V2 API.
+- [ ] **Step 5: Rewrite the plugin** to run `pnpm verify` and apply `retry.ts`, keeping the existing worktree-change detection and V2 API. On exhaustion, its follow-up instructs the agent to ask the `question`-tool prompt above; "Give other instructions" does not reset the ladder.
 - [ ] **Step 6: Verify the plugin loads** — `tsc -p .opencode`, touch the file, confirm the log shows no `failed to load plugin`.
 - [ ] **Step 7: Commit**
 
@@ -269,8 +299,8 @@ git commit -m "docs(trust-pipeline): portability boundary and method"
 
 ## Self-Review
 
-- **Spec coverage:** pipeline order (Phase 3 + 4 + 5 + 6); Vitest migration (2); coverage floor (2); deterministic tools (3–5); development method (1, judged in 6); ts-arch pattern suite (5); Jev rubric incl. methodology + new-pattern (6); bounded retry (7); layout / as-if-portable + extraction path (1, 3, 8); local-only (global constraints).
-- **Type consistency:** `Stage`/`StageResult`/`ProjectConfig` (3) are consumed unchanged in 4–6; `checkSource`/`Violation` (4); `verdict`/`RubricAnswer`/`HIGH_CONFIDENCE` (6); `nextBudget` (7).
+- **Spec coverage:** repo structure — apps/packages + public→blog (Phase 0); pipeline order (3 + 4 + 5 + 6); Vitest migration incl. blog (2); coverage floor (2); deterministic tools (3–5); development method (1, judged in 6); ts-arch pattern suite (5); Jev rubric incl. methodology + new-pattern (6); bounded retry (7); layout / as-if-portable + extraction path (1, 3, 8); local-only (global constraints).
+- **Type consistency:** `Stage`/`StageResult`/`ProjectConfig` (3) are consumed unchanged in 4–6; `checkSource`/`Violation` (4); `verdict`/`RubricAnswer`/`HIGH_CONFIDENCE` (6); `nextGrant` (7).
 - **Review Focus:** each of the six lines has a test pinned to its owning phase.
 - **Proportion:** signatures, tests, and pinned values; bodies left to the implementer except where a pattern must be chosen.
-- **One goal per phase:** each phase is a self-contained, one-sentence session (docs; vitest; engine; structure; scans; review; retry; portability).
+- **One goal per phase:** each phase is a self-contained, one-sentence session (restructure; docs; vitest; engine; structure; scans; review; retry; portability).
