@@ -222,7 +222,7 @@ git commit -m "feat(trust-pipeline): security/duplication scans and arch pattern
 - Modify: `trust-pipeline/engine/run.ts`, `trust-pipeline/project/config.ts`
 
 **Interfaces:**
-- Consumes: the diff.
+- Consumes: the diff; broken up by AST for symbol-by-symbol review
 - Produces:
   - `export const HIGH_CONFIDENCE = 0.8`
   - `export type RubricAnswer = { question: string; answer: boolean; confidence: number }`
