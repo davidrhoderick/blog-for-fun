@@ -148,10 +148,13 @@ to fix, and the bounded retry still applies.
 ## Layout (as-if-portable, not tangled in app code)
 
 ```
-tools/trust-pipeline/
+trust-pipeline/            # top-level (not under tools/), so it is free-standing
   engine/     # generic: orchestration, check wrappers, retry, Jev harness, verdict, templates
   project/    # this repo only: config (thresholds/globs/commands), ts-arch patterns, Jev rubric
 ```
+
+Moving the directory later is trivial, so a top-level `trust-pipeline/` keeps it
+visually separate from app code without a `tools/` grab-bag.
 
 - `pnpm verify` invokes the engine with `project/` config.
 - The engine imports nothing from `server/`, `admin/`, or `packages/`.
