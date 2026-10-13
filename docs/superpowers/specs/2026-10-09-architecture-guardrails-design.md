@@ -1,5 +1,8 @@
 # Architecture Guardrails — Design
 
+> **SUPERSEDED** by `2026-10-13-trust-pipeline-and-development-method-design.md`.
+> Kept for history; the guardrails are now the structure/lint stages of the trust pipeline.
+
 - **Date:** 2026-10-09
 - **Status:** Draft for review
 - **Scope:** Repo-wide (server, admin, packages, local tools)
