@@ -38,4 +38,5 @@ Codegen on demand:
 - Admin: Relay artifacts + `react-router typegen`
 - Blog: `react-router typegen`
 
-The GraphQL client layer is **Relay**.
+The GraphQL client layer for the admin app is **Relay**. `blog` is
+server-rendered and fetches directly through its server helper.

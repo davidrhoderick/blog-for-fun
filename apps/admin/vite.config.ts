@@ -10,6 +10,9 @@ export default defineConfig({
     dedupe: ['relay-runtime'],
     tsconfigPaths: true,
   },
+  server: {
+    port: 3001,
+  },
   ssr: {
     noExternal: ['react-relay', 'relay-runtime'],
   },

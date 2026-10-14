@@ -49,14 +49,17 @@ in the pipeline's `scans` stage.
 
 ## Frontend composition (`apps/admin`, `apps/blog`)
 
-- **Relay is the GraphQL client layer.** Components request data with Relay
-  queries/fragments; do not hand-roll fetch calls.
+- **`apps/admin` uses Relay as its GraphQL client layer.** Components request
+  data with Relay queries/fragments; do not hand-roll fetch calls there.
+- **`apps/blog` is server-rendered and fetches directly** through its server
+  helper (`app/lib/relay.server.ts` → `requestPublicGraphQL`, a plain `fetch`),
+  called from route loaders. The Relay rule does not apply to it today.
 - **Compose components.** Extract a new component when a piece is more than
   three things; do not grow one component into a whole page.
 - **No JSX produced inside `useMemo`/`useCallback`** — those return values, not
   markup. Checked by the GritQL plugin above.
 - **Reuse hooks**; a behavior that belongs in a hook lives in a hook.
-- Split **server state** (Relay/route data) from **local or context state**; do
-  not duplicate one into the other.
+- Split **server state** (Relay query or route data) from **local or context
+  state**; do not duplicate one into the other.
 - React Router route modules stay thin and lazy-load client-only work; admin
   keeps `*.client.tsx` components behind `Suspense`.
