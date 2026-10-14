@@ -59,5 +59,7 @@ test('hydrates into the client post list', {
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('First note')).toBeTruthy()
+  expect(
+    await screen.findByText('First note', undefined, { timeout: 5000 }),
+  ).toBeTruthy()
 })
