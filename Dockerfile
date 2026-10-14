@@ -4,9 +4,9 @@ RUN corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY admin/package.json admin/package.json
-COPY public/package.json public/package.json
-COPY server/package.json server/package.json
+COPY apps/admin/package.json apps/admin/package.json
+COPY apps/blog/package.json apps/blog/package.json
+COPY apps/server/package.json apps/server/package.json
 COPY packages/graphql-runtime/package.json packages/graphql-runtime/package.json
 COPY packages/ui/package.json packages/ui/package.json
 
@@ -17,7 +17,7 @@ FROM dependencies AS build
 COPY . .
 
 RUN pnpm --filter server run dev:codegen
-RUN pnpm --filter public run build
+RUN pnpm --filter blog run build
 RUN pnpm --filter admin run build
 
 FROM node:24-alpine AS runtime

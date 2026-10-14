@@ -5,8 +5,8 @@
   "scripts": {
     "build": "pnpm run relay && react-router build",
     "dev": "pnpm run relay && react-router dev",
-    "relay": "pnpm --dir .. run graphql:generate && relay-compiler relay.config.json",
-    "relay:watch": "pnpm --dir .. run graphql:generate && relay-compiler --watch relay.config.json",
+    "relay": "pnpm --dir ../.. run graphql:generate && relay-compiler relay.config.json",
+    "relay:watch": "pnpm --dir ../.. run graphql:generate && relay-compiler --watch relay.config.json",
     "start": "react-router-serve ./build/server/index.js",
     "test": "tsx --test \"app/**/*.test.ts\"",
     "typecheck": "pnpm run relay && react-router typegen && tsc"

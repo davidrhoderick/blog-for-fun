@@ -10,7 +10,7 @@ module.exports = {
       name: 'graphql',
       script: './node_modules/.bin/tsx',
       args: 'src/server.ts',
-      cwd: '/app/server',
+      cwd: '/app/apps/server',
       interpreter: 'none',
       env: {
         HOST: '127.0.0.1',
@@ -18,10 +18,10 @@ module.exports = {
       },
     },
     {
-      name: 'public',
+      name: 'blog',
       script: './node_modules/.bin/react-router-serve',
       args: './build/server/index.js',
-      cwd: '/app/public',
+      cwd: '/app/apps/blog',
       interpreter: 'none',
       env: {
         GRAPHQL_URL: 'http://127.0.0.1:4000/graphql',
@@ -32,7 +32,7 @@ module.exports = {
       name: 'admin',
       script: './node_modules/.bin/react-router-serve',
       args: './build/server/index.js',
-      cwd: '/app/admin',
+      cwd: '/app/apps/admin',
       interpreter: 'none',
       env: {
         GRAPHQL_URL: 'http://127.0.0.1:4000/graphql',

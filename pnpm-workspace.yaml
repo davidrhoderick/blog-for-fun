@@ -1,8 +1,6 @@
 packages:
+  - 'apps/*'
   - 'packages/*'
-  - 'public'
-  - 'admin'
-  - 'server'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
