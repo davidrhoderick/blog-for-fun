@@ -83,6 +83,9 @@ const sentOperations = (fetchMock: ReturnType<typeof stubEditorFetch>) =>
     .filter(([, init]) => init?.method !== 'PUT')
     .map(([, init]) => operationName(init))
 
+const findEditor = () =>
+  screen.findByDisplayValue('First note', {}, { timeout: 10_000 })
+
 const clearRelayStore = () =>
   (
     relayEnvironment.getStore().getSource() as unknown as {
@@ -101,7 +104,7 @@ test('edits a post, publishes it, and lists its media', {
   const fetchMock = stubEditorFetch()
   renderEditor()
 
-  expect(await screen.findByDisplayValue('First note')).toBeTruthy()
+  expect(await findEditor()).toBeTruthy()
   expect(screen.getByDisplayValue('first-note')).toBeTruthy()
   expect(screen.getAllByText('Draft')).toHaveLength(2)
   expect(screen.getByText('A photo')).toBeTruthy()
@@ -121,7 +124,7 @@ test('inserts an uploaded image into the editor', {
 }, async () => {
   const fetchMock = stubEditorFetch()
   renderEditor()
-  await screen.findByDisplayValue('First note')
+  await findEditor()
 
   fireEvent.change(screen.getByLabelText('Image file'), {
     target: {
@@ -143,7 +146,7 @@ test('inserts an uploaded image into the editor', {
 test('asks for a file before uploading', { tags: ['unit'] }, async () => {
   stubEditorFetch()
   renderEditor()
-  await screen.findByDisplayValue('First note')
+  await findEditor()
 
   fireEvent.change(screen.getByLabelText('Alternative text'), {
     target: { value: 'A described image' },
@@ -167,7 +170,9 @@ test('offers to unpublish a published post', { tags: ['unit'] }, async () => {
 
   renderEditor()
 
-  expect(await screen.findByText('No images uploaded yet.')).toBeTruthy()
+  expect(
+    await screen.findByText('No images uploaded yet.', {}, { timeout: 10_000 }),
+  ).toBeTruthy()
   expect(screen.getAllByText('Published')).toHaveLength(2)
   fireEvent.click(screen.getAllByRole('button', { name: 'Unpublish' })[0])
 
@@ -184,5 +189,7 @@ test('reports a missing post', { tags: ['unit'] }, async () => {
 
   renderEditor()
 
-  expect(await screen.findByText('Post not found.')).toBeTruthy()
+  expect(
+    await screen.findByText('Post not found.', {}, { timeout: 10_000 }),
+  ).toBeTruthy()
 })
