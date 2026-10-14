@@ -5,8 +5,18 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4"
   }
 }

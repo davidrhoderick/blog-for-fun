@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'trust-pipeline'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

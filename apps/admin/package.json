@@ -5,11 +5,13 @@
   "scripts": {
     "build": "pnpm run relay && react-router build",
     "dev": "pnpm run relay && react-router dev",
-    "relay": "pnpm --dir ../.. run graphql:generate && relay-compiler relay.config.json",
-    "relay:watch": "pnpm --dir ../.. run graphql:generate && relay-compiler --watch relay.config.json",
+    "codegen": "mkdir -p app/__generated__ && relay-compiler relay.config.json && react-router typegen",
+    "relay": "pnpm --dir ../.. run graphql:generate && mkdir -p app/__generated__ && relay-compiler relay.config.json",
+    "relay:watch": "pnpm --dir ../.. run graphql:generate && mkdir -p app/__generated__ && relay-compiler --watch relay.config.json",
     "start": "react-router-serve ./build/server/index.js",
-    "test": "tsx --test \"app/**/*.test.ts\"",
-    "typecheck": "pnpm run relay && react-router typegen && tsc"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -37,15 +39,19 @@
   "devDependencies": {
     "@react-router/dev": "^8",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^5.0.4",
     "babel-plugin-relay": "^21.0.1",
+    "jsdom": "^30.1.2",
     "relay-compiler": "^21.0.1",
     "tailwindcss": "^4.2.2",
     "tsx": "^4.23.9",
     "typescript": "^5.9.3",
     "vite": "^8.0.3",
-    "vite-plugin-relay": "^2.1.0"
+    "vite-plugin-relay": "^2.1.0",
+    "vitest": "^5.0.4"
   }
 }

@@ -5,8 +5,11 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
+    "codegen": "react-router typegen",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@react-router/node": "^8",
@@ -22,11 +25,15 @@
   "devDependencies": {
     "@react-router/dev": "^8",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^5.0.4",
+    "jsdom": "^30.1.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^8.0.3"
+    "vite": "^8.0.3",
+    "vitest": "^5.0.4"
   }
 }

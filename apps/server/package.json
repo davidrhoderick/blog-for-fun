@@ -9,7 +9,9 @@
     "dev:server": "tsx watch src/server.ts",
     "dev": "pnpm run dev:codegen && concurrently --kill-others-on-fail -n codegen,server \"pnpm run dev:codegen:watch\" \"pnpm run dev:server\"",
     "start": "tsx src/server.ts",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
@@ -40,9 +42,12 @@
     "@graphql-codegen/cli": "^7.2.0",
     "@parcel/watcher": "^2.6.0",
     "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^5.0.4",
     "concurrently": "^10.0.5",
     "drizzle-kit": "1.0.0-rc.4",
     "s3rver": "^3.7.1",
-    "tsx": "^4.23.9"
+    "tsx": "^4.23.9",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4"
   }
 }

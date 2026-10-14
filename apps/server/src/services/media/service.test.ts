@@ -1,11 +1,10 @@
-import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/libsql/migrator'
+import { afterAll, beforeAll, expect, test } from 'vitest'
 
 type S3rverInstance = {
   run: () => Promise<{ address: string; port: number }>
@@ -26,19 +25,20 @@ type S3rverConstructor = new (options: {
 const require = createRequire(import.meta.url)
 const S3rver = require('s3rver') as S3rverConstructor
 const tempDirectory = await mkdtemp(join(tmpdir(), 'blog-media-test-'))
+const bucketName = 'media-test'
 process.env.TURSO_CONNECTION_URL = `file:${join(tempDirectory, 'test.db')}`
 process.env.TURSO_AUTH_TOKEN = 'test-token'
 process.env.AWS_REGION = 'us-east-1'
 process.env.AWS_ACCESS_KEY_ID = 'S3RVER'
 process.env.AWS_SECRET_ACCESS_KEY = 'S3RVER'
-process.env.BUCKET_NAME = 'media-test'
+process.env.BUCKET_NAME = bucketName
 process.env.S3_FORCE_PATH_STYLE = 'true'
 process.env.MEDIA_OBJECT_ACL = 'public-read'
 
 const s3 = new S3rver({
   address: '127.0.0.1',
   allowMismatchedSignatures: true,
-  configureBuckets: [{ name: process.env.BUCKET_NAME }],
+  configureBuckets: [{ name: bucketName }],
   directory: join(tempDirectory, 'objects'),
   port: 0,
   resetOnClose: true,
@@ -55,7 +55,7 @@ const migrationsFolder = fileURLToPath(
 )
 const postId = crypto.randomUUID()
 
-before(async () => {
+beforeAll(async () => {
   const { port } = await s3.run()
   process.env.AWS_ENDPOINT_URL_S3 = `http://127.0.0.1:${port}`
   process.env.MEDIA_PUBLIC_URL = `${process.env.AWS_ENDPOINT_URL_S3}/${process.env.BUCKET_NAME}`
@@ -68,12 +68,14 @@ before(async () => {
   })
 })
 
-after(async () => {
+afterAll(async () => {
   await s3.close()
   await rm(tempDirectory, { recursive: true, force: true })
 })
 
-test('keeps prepared uploads hidden until the object is verified', async () => {
+test('keeps prepared uploads hidden until the object is verified', {
+  tags: ['integration'],
+}, async () => {
   const content = 'verified image bytes'
   const prepared = await prepareMediaUpload({
     filename: 'verified.png',
@@ -83,22 +85,24 @@ test('keeps prepared uploads hidden until the object is verified', async () => {
     attachedPostId: postId,
   })
 
-  assert.equal(prepared.asset.status, 'PENDING')
-  assert.deepEqual(await getMediaAssets(), [])
+  expect(prepared.asset.status).toBe('PENDING')
+  expect(await getMediaAssets()).toEqual([])
   const response = await fetch(prepared.uploadUrl, {
     method: 'PUT',
     headers: { 'content-type': 'image/png' },
     body: content,
   })
-  assert.equal(response.ok, true)
+  expect(response.ok).toBe(true)
 
   const finalized = await finalizeMediaUpload(String(prepared.asset.id))
-  assert.equal(finalized.status, 'READY')
-  assert.equal(finalized.attachedPostId, postId)
-  assert.equal((await getMediaAssets()).length, 1)
+  expect(finalized.status).toBe('READY')
+  expect(finalized.attachedPostId).toBe(postId)
+  expect((await getMediaAssets()).length).toBe(1)
 })
 
-test('removes an upload when object metadata does not match', async () => {
+test('removes an upload when object metadata does not match', {
+  tags: ['unit'],
+}, async () => {
   const prepared = await prepareMediaUpload({
     filename: 'invalid.png',
     contentType: 'image/png',
@@ -110,20 +114,17 @@ test('removes an upload when object metadata does not match', async () => {
     headers: { 'content-type': 'image/png' },
     body: 'too short',
   })
-  assert.equal(response.ok, true)
+  expect(response.ok).toBe(true)
 
-  await assert.rejects(finalizeMediaUpload(String(prepared.asset.id)), {
-    message: 'Uploaded object does not match its metadata',
-  })
-  const remaining = await db.select().from(mediaAssets)
-  assert.equal(
-    remaining.some((asset) => asset.id === prepared.asset.id),
-    false,
+  await expect(finalizeMediaUpload(String(prepared.asset.id))).rejects.toThrow(
+    'Uploaded object does not match its metadata',
   )
+  const remaining = await db.select().from(mediaAssets)
+  expect(remaining.some((asset) => asset.id === prepared.asset.id)).toBe(false)
 })
 
-test('rejects attachment to a missing post', async () => {
-  await assert.rejects(
+test('rejects attachment to a missing post', { tags: ['unit'] }, async () => {
+  await expect(
     prepareMediaUpload({
       filename: 'missing-post.png',
       contentType: 'image/png',
@@ -131,6 +132,5 @@ test('rejects attachment to a missing post', async () => {
       altText: 'Missing post',
       attachedPostId: crypto.randomUUID(),
     }),
-    { message: 'Attached post not found' },
-  )
+  ).rejects.toThrow('Attached post not found')
 })

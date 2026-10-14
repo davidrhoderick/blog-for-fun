@@ -1,10 +1,9 @@
-import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/libsql/migrator'
+import { afterAll, beforeAll, expect, test } from 'vitest'
 
 const tempDirectory = await mkdtemp(join(tmpdir(), 'blog-auth-test-'))
 process.env.TURSO_CONNECTION_URL = `file:${join(tempDirectory, 'test.db')}`
@@ -37,12 +36,12 @@ const administrator = {
 
 let authenticatedPostId: string
 
-before(async () => {
+beforeAll(async () => {
   await migrate(db, { migrationsFolder })
   await bootstrapAdministrator(administrator)
 })
 
-after(async () => {
+afterAll(async () => {
   await rm(tempDirectory, { recursive: true, force: true })
 })
 
@@ -76,40 +75,46 @@ const login = async () => {
     { input: { email: administrator.email, password: administrator.password } },
   )
   const setCookie = response.headers.get('set-cookie')
-  assert.ok(setCookie)
+  if (!setCookie) throw new Error('Login did not set a session cookie')
   const cookie = setCookie.split(';', 1)[0]
   return { response, setCookie, cookie }
 }
 
-test('bootstrap creates one explicit administrator and cannot run twice', async () => {
+test('bootstrap creates one explicit administrator and cannot run twice', {
+  tags: ['integration'],
+}, async () => {
   const [role] = await db.query.authUserRoles.findMany()
-  assert.equal(role.role, 'administrator')
+  expect(role.role).toBe('administrator')
 
-  await assert.rejects(bootstrapAdministrator(administrator), {
-    message: 'Bootstrap refused because an authentication user already exists',
-  })
+  await expect(bootstrapAdministrator(administrator)).rejects.toThrow(
+    'Bootstrap refused because an authentication user already exists',
+  )
 })
 
-test('login uses a secure opaque cookie and stores only its hash', async () => {
+test('login uses a secure opaque cookie and stores only its hash', {
+  tags: ['integration'],
+}, async () => {
   const { response, setCookie, cookie } = await login()
   const body = await responseJson(response)
 
-  assert.equal(body.errors, undefined)
-  assert.match(setCookie, /HttpOnly/i)
-  assert.match(setCookie, /SameSite=Lax/i)
-  assert.match(setCookie, /Path=\//i)
-  assert.match(cookie, new RegExp(`^${SESSION_COOKIE_NAME}=`))
+  expect(body.errors).toBeUndefined()
+  expect(setCookie).toMatch(/HttpOnly/i)
+  expect(setCookie).toMatch(/SameSite=Lax/i)
+  expect(setCookie).toMatch(/Path=\//i)
+  expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE_NAME}=`))
 
   const token = cookie.slice(cookie.indexOf('=') + 1)
   const [session] = await db.select().from(authSessions)
-  assert.notEqual(session.id, token)
-  assert.equal(session.id, hashSessionToken(token))
+  expect(session.id).not.toBe(token)
+  expect(session.id).toBe(hashSessionToken(token))
 })
 
-test('invalid and unknown credentials return the same public error', async () => {
+test('invalid and unknown credentials return the same public error', {
+  tags: ['integration'],
+}, async () => {
   const query = `mutation Login($input: LoginInput!) {
-    login(input: $input) { id }
-  }`
+      login(input: $input) { id }
+    }`
   const wrongPassword = await responseJson(
     await graphql(query, {
       input: { email: administrator.email, password: 'wrong password' },
@@ -121,18 +126,20 @@ test('invalid and unknown credentials return the same public error', async () =>
     }),
   )
 
-  assert.equal(wrongPassword.errors?.[0]?.message, 'Invalid email or password')
-  assert.equal(unknownEmail.errors?.[0]?.message, 'Invalid email or password')
-  assert.equal(wrongPassword.errors?.[0]?.extensions?.code, 'UNAUTHENTICATED')
-  assert.equal(unknownEmail.errors?.[0]?.extensions?.code, 'UNAUTHENTICATED')
+  expect(wrongPassword.errors?.[0]?.message).toBe('Invalid email or password')
+  expect(unknownEmail.errors?.[0]?.message).toBe('Invalid email or password')
+  expect(wrongPassword.errors?.[0]?.extensions?.code).toBe('UNAUTHENTICATED')
+  expect(unknownEmail.errors?.[0]?.extensions?.code).toBe('UNAUTHENTICATED')
 })
 
-test('authenticated viewer and administrator mutation use the session', async () => {
+test('authenticated viewer and administrator mutation use the session', {
+  tags: ['integration'],
+}, async () => {
   const { cookie } = await login()
   const viewer = await responseJson(
     await graphql('{ viewer { email displayName roles } }', undefined, cookie),
   )
-  assert.deepEqual(viewer.data?.viewer, {
+  expect(viewer.data?.viewer).toEqual({
     email: administrator.email,
     displayName: administrator.displayName,
     roles: ['ADMINISTRATOR'],
@@ -141,12 +148,12 @@ test('authenticated viewer and administrator mutation use the session', async ()
   const mutation = await responseJson(
     await graphql(
       `mutation {
-        putPost(input: {
-          slug: "authenticated-post"
-          title: "Authenticated post"
-          markdownContent: "Private edit"
-        }) { id slug publishedAt }
-      }`,
+          putPost(input: {
+            slug: "authenticated-post"
+            title: "Authenticated post"
+            markdownContent: "Private edit"
+          }) { id slug publishedAt }
+        }`,
       undefined,
       cookie,
     ),
@@ -158,28 +165,30 @@ test('authenticated viewer and administrator mutation use the session', async ()
         publishedAt: string | null
       }
     | undefined
-  assert.ok(createdPost)
-  assert.deepEqual(createdPost, {
+  if (!createdPost) throw new Error('putPost returned no post')
+  expect(createdPost).toEqual({
     id: createdPost.id,
     slug: 'authenticated-post',
     publishedAt: null,
   })
-  assert.equal(typeof createdPost.id, 'string')
+  expect(typeof createdPost.id).toBe('string')
   authenticatedPostId = createdPost.id
 })
 
-test('public reads remain open while anonymous and roleless writes fail', async () => {
+test('public reads remain open while anonymous and roleless writes fail', {
+  tags: ['integration'],
+}, async () => {
   const publicRead = await responseJson(
     await graphql(
       `query DraftVisibility($id: ID!) {
-        posts { id }
-        post(id: $id) { id }
-        postBySlug(slug: "authenticated-post") { id }
-      }`,
+          posts { id }
+          post(id: $id) { id }
+          postBySlug(slug: "authenticated-post") { id }
+        }`,
       { id: authenticatedPostId },
     ),
   )
-  assert.deepEqual(publicRead.data, {
+  expect(publicRead.data).toEqual({
     posts: [],
     post: null,
     postBySlug: null,
@@ -188,40 +197,35 @@ test('public reads remain open while anonymous and roleless writes fail', async 
   const anonymousWrite = await responseJson(
     await graphql('mutation { deletePost(id: "authenticated-post") { id } }'),
   )
-  assert.equal(anonymousWrite.errors?.[0]?.extensions?.code, 'UNAUTHENTICATED')
+  expect(anonymousWrite.errors?.[0]?.extensions?.code).toBe('UNAUTHENTICATED')
   const anonymousPublish = await responseJson(
     await graphql(
       `mutation Publish($id: ID!) {
-        publishPost(id: $id) { id }
-      }`,
+          publishPost(id: $id) { id }
+        }`,
       { id: authenticatedPostId },
     ),
   )
-  assert.equal(
-    anonymousPublish.errors?.[0]?.extensions?.code,
-    'UNAUTHENTICATED',
-  )
+  expect(anonymousPublish.errors?.[0]?.extensions?.code).toBe('UNAUTHENTICATED')
   const anonymousMediaUpload = await responseJson(
     await graphql(
       `mutation {
-        prepareMediaUpload(input: {
-          filename: "image.png"
-          contentType: "image/png"
-          size: 100
-          altText: "Image"
-        }) { uploadUrl }
-      }`,
+          prepareMediaUpload(input: {
+            filename: "image.png"
+            contentType: "image/png"
+            size: 100
+            altText: "Image"
+          }) { uploadUrl }
+        }`,
     ),
   )
-  assert.equal(
-    anonymousMediaUpload.errors?.[0]?.extensions?.code,
+  expect(anonymousMediaUpload.errors?.[0]?.extensions?.code).toBe(
     'UNAUTHENTICATED',
   )
   const anonymousMediaFinalize = await responseJson(
     await graphql('mutation { finalizeMediaUpload(id: "missing") { id } }'),
   )
-  assert.equal(
-    anonymousMediaFinalize.errors?.[0]?.extensions?.code,
+  expect(anonymousMediaFinalize.errors?.[0]?.extensions?.code).toBe(
     'UNAUTHENTICATED',
   )
 
@@ -238,15 +242,15 @@ test('public reads remain open while anonymous and roleless writes fail', async 
   const rolelessRead = await responseJson(
     await graphql(
       `query DraftVisibility($id: ID!) {
-        posts { id }
-        post(id: $id) { id }
-        postBySlug(slug: "authenticated-post") { id }
-      }`,
+          posts { id }
+          post(id: $id) { id }
+          postBySlug(slug: "authenticated-post") { id }
+        }`,
       { id: authenticatedPostId },
       rolelessCookie,
     ),
   )
-  assert.deepEqual(rolelessRead.data, publicRead.data)
+  expect(rolelessRead.data).toEqual(publicRead.data)
 
   const rolelessWrite = await responseJson(
     await graphql(
@@ -255,34 +259,36 @@ test('public reads remain open while anonymous and roleless writes fail', async 
       rolelessCookie,
     ),
   )
-  assert.equal(rolelessWrite.errors?.[0]?.extensions?.code, 'FORBIDDEN')
+  expect(rolelessWrite.errors?.[0]?.extensions?.code).toBe('FORBIDDEN')
   const rolelessUnpublish = await responseJson(
     await graphql(
       `mutation Unpublish($id: ID!) {
-        unpublishPost(id: $id) { id }
-      }`,
+          unpublishPost(id: $id) { id }
+        }`,
       { id: authenticatedPostId },
       rolelessCookie,
     ),
   )
-  assert.equal(rolelessUnpublish.errors?.[0]?.extensions?.code, 'FORBIDDEN')
+  expect(rolelessUnpublish.errors?.[0]?.extensions?.code).toBe('FORBIDDEN')
 })
 
-test('administrator can read drafts and control publication timing', async () => {
+test('administrator can read drafts and control publication timing', {
+  tags: ['integration'],
+}, async () => {
   const { cookie } = await login()
   const administratorRead = await responseJson(
     await graphql(
       `query DraftVisibility($id: ID!) {
-        posts { id publishedAt }
-        post(id: $id) { id publishedAt }
-        postBySlug(slug: "authenticated-post") { id publishedAt }
-      }`,
+          posts { id publishedAt }
+          post(id: $id) { id publishedAt }
+          postBySlug(slug: "authenticated-post") { id publishedAt }
+        }`,
       { id: authenticatedPostId },
       cookie,
     ),
   )
   const draft = { id: authenticatedPostId, publishedAt: null }
-  assert.deepEqual(administratorRead.data, {
+  expect(administratorRead.data).toEqual({
     posts: [draft],
     post: draft,
     postBySlug: draft,
@@ -292,37 +298,36 @@ test('administrator can read drafts and control publication timing', async () =>
   const schedule = await responseJson(
     await graphql(
       `mutation Schedule($id: ID!, $publishedAt: DateTimeISO!) {
-        publishPost(id: $id, publishedAt: $publishedAt) {
-          id
-          publishedAt
-          revisions { nodes { id } }
-        }
-      }`,
+          publishPost(id: $id, publishedAt: $publishedAt) {
+            id
+            publishedAt
+            revisions { nodes { id } }
+          }
+        }`,
       { id: authenticatedPostId, publishedAt: scheduledAt },
       cookie,
     ),
   )
-  assert.equal(schedule.errors, undefined)
-  assert.ok(
+  expect(schedule.errors).toBeUndefined()
+  expect(
     (schedule.data?.publishPost as { publishedAt?: string })?.publishedAt,
-  )
-  assert.deepEqual(
+  ).toBeTruthy()
+  expect(
     (schedule.data?.publishPost as { revisions?: { nodes: unknown[] } })
       ?.revisions?.nodes,
-    [],
-  )
+  ).toEqual([])
 
   const scheduledRead = await responseJson(
     await graphql(
       `query ScheduledVisibility($id: ID!) {
-        posts { id }
-        post(id: $id) { id }
-        postBySlug(slug: "authenticated-post") { id }
-      }`,
+          posts { id }
+          post(id: $id) { id }
+          postBySlug(slug: "authenticated-post") { id }
+        }`,
       { id: authenticatedPostId },
     ),
   )
-  assert.deepEqual(scheduledRead.data, {
+  expect(scheduledRead.data).toEqual({
     posts: [],
     post: null,
     postBySlug: null,
@@ -331,30 +336,30 @@ test('administrator can read drafts and control publication timing', async () =>
   const publish = await responseJson(
     await graphql(
       `mutation Publish($id: ID!) {
-        publishPost(id: $id) {
-          publishedAt
-        }
-      }`,
+          publishPost(id: $id) {
+            publishedAt
+          }
+        }`,
       { id: authenticatedPostId },
       cookie,
     ),
   )
-  assert.ok(
+  expect(
     (publish.data?.publishPost as { publishedAt?: string })?.publishedAt,
-  )
+  ).toBeTruthy()
 
   const publishedRead = await responseJson(
     await graphql(
       `query PublishedVisibility($id: ID!) {
-        posts { id }
-        post(id: $id) { id }
-        postBySlug(slug: "authenticated-post") { id }
-      }`,
+          posts { id }
+          post(id: $id) { id }
+          postBySlug(slug: "authenticated-post") { id }
+        }`,
       { id: authenticatedPostId },
     ),
   )
   const published = { id: authenticatedPostId }
-  assert.deepEqual(publishedRead.data, {
+  expect(publishedRead.data).toEqual({
     posts: [published],
     post: published,
     postBySlug: published,
@@ -363,15 +368,15 @@ test('administrator can read drafts and control publication timing', async () =>
   const unpublish = await responseJson(
     await graphql(
       `mutation Unpublish($id: ID!) {
-        unpublishPost(id: $id) {
-          publishedAt
-        }
-      }`,
+          unpublishPost(id: $id) {
+            publishedAt
+          }
+        }`,
       { id: authenticatedPostId },
       cookie,
     ),
   )
-  assert.deepEqual(unpublish.data?.unpublishPost, {
+  expect(unpublish.data?.unpublishPost).toEqual({
     publishedAt: null,
   })
 
@@ -380,32 +385,36 @@ test('administrator can read drafts and control publication timing', async () =>
       '{ posts { id } postBySlug(slug: "authenticated-post") { id } }',
     ),
   )
-  assert.deepEqual(unpublishedRead.data, { posts: [], postBySlug: null })
+  expect(unpublishedRead.data).toEqual({ posts: [], postBySlug: null })
 })
 
-test('logout revokes the session and clears its cookie', async () => {
+test('logout revokes the session and clears its cookie', {
+  tags: ['integration'],
+}, async () => {
   const { cookie } = await login()
   const response = await graphql('mutation { logout }', undefined, cookie)
   const body = await responseJson(response)
   const setCookie = response.headers.get('set-cookie')
 
-  assert.deepEqual(body.data, { logout: true })
-  assert.match(setCookie ?? '', /Max-Age=0/i)
+  expect(body.data).toEqual({ logout: true })
+  expect(setCookie ?? '').toMatch(/Max-Age=0/i)
 
   const viewer = await responseJson(
     await graphql('{ viewer { id } }', undefined, cookie),
   )
-  assert.equal(viewer.data?.viewer, null)
+  expect(viewer.data?.viewer).toBeNull()
 })
 
-test('expired and disabled-user sessions are rejected and deleted', async () => {
+test('expired and disabled-user sessions are rejected and deleted', {
+  tags: ['integration'],
+}, async () => {
   const [administratorUser] = await db.select().from(authUsers)
   const expired = await createSession(
     administratorUser.id,
     new Date(Date.now() - SESSION_IDLE_DURATION_MS - 1_000),
   )
   const expiredResult = await validateSessionToken(expired.token)
-  assert.equal(expiredResult.session, null)
+  expect(expiredResult.session).toBeNull()
 
   const disabledUserId = crypto.randomUUID()
   await db.insert(authUsers).values({ id: disabledUserId, status: 'disabled' })
@@ -417,16 +426,17 @@ test('expired and disabled-user sessions are rejected and deleted', async () => 
   })
   const disabled = await createSession(disabledUserId)
   const disabledResult = await validateSessionToken(disabled.token)
-  assert.equal(disabledResult.session, null)
-  assert.equal(
+  expect(disabledResult.session).toBeNull()
+  expect(
     await db.query.authSessions.findFirst({
       where: { id: hashSessionToken(disabled.token) },
     }),
-    undefined,
-  )
+  ).toBeUndefined()
 })
 
-test('sessions renew inside the renewal window and can be revoked together', async () => {
+test('sessions renew inside the renewal window and can be revoked together', {
+  tags: ['integration'],
+}, async () => {
   const [administratorUser] = await db.select().from(authUsers)
   const now = new Date()
   const createdAt = new Date(
@@ -435,15 +445,16 @@ test('sessions renew inside the renewal window and can be revoked together', asy
   const renewable = await createSession(administratorUser.id, createdAt)
   const result = await validateSessionToken(renewable.token, now)
 
-  assert.equal(result.renewed, true)
-  assert.ok(result.session)
-  assert.ok(result.session.expiresAt > renewable.session.expiresAt)
+  expect(result.renewed).toBe(true)
+  if (!result.session) throw new Error('renewal returned no session')
+  expect(result.session.expiresAt.getTime()).toBeGreaterThan(
+    renewable.session.expiresAt.getTime(),
+  )
 
   await revokeUserSessions(administratorUser.id)
-  assert.equal(
+  expect(
     await db.query.authSessions.findFirst({
       where: { authUserId: administratorUser.id },
     }),
-    undefined,
-  )
+  ).toBeUndefined()
 })

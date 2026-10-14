@@ -1,10 +1,9 @@
-import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/libsql/migrator'
+import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { AuthContext } from '../../auth/context'
 import { postRevisions, posts } from '../../db/schema'
 
@@ -43,7 +42,7 @@ const migrationsFolder = fileURLToPath(
   new URL('../../../migrations', import.meta.url),
 )
 
-before(async () => {
+beforeAll(async () => {
   await migrate(db, { migrationsFolder })
 
   await db.insert(posts).values([
@@ -85,37 +84,35 @@ before(async () => {
   ])
 })
 
-after(async () => {
+afterAll(async () => {
   await rm(tempDirectory, { recursive: true, force: true })
 })
 
 const requirePost = async (id: string) => {
   const post = await getPost(id)
-  assert.ok(post)
+  if (!post) throw new Error(`Post ${id} not found`)
   return post
 }
 
-test('returns the first revision page', async () => {
+test('returns the first revision page', { tags: ['integration'] }, async () => {
   const connection = await getPostRevisions(
     await requirePost('post-with-revisions'),
     { first: 2 },
   )
 
-  assert.deepEqual(
-    connection.nodes.map(({ revisionNumber }) => revisionNumber),
-    [5, 4],
-  )
-  assert.deepEqual(
-    connection.edges.map(({ node }) => node),
-    connection.nodes,
-  )
-  assert.equal(connection.pageInfo.hasNextPage, true)
-  assert.equal(connection.pageInfo.hasPreviousPage, false)
-  assert.equal(connection.pageInfo.startCursor, connection.edges[0]?.cursor)
-  assert.equal(connection.pageInfo.endCursor, connection.edges[1]?.cursor)
+  expect(connection.nodes.map(({ revisionNumber }) => revisionNumber)).toEqual([
+    5, 4,
+  ])
+  expect(connection.edges.map(({ node }) => node)).toEqual(connection.nodes)
+  expect(connection.pageInfo.hasNextPage).toBe(true)
+  expect(connection.pageInfo.hasPreviousPage).toBe(false)
+  expect(connection.pageInfo.startCursor).toBe(connection.edges[0]?.cursor)
+  expect(connection.pageInfo.endCursor).toBe(connection.edges[1]?.cursor)
 })
 
-test('returns a subsequent revision page', async () => {
+test('returns a subsequent revision page', {
+  tags: ['integration'],
+}, async () => {
   const post = await requirePost('post-with-revisions')
   const firstPage = await getPostRevisions(post, { first: 2 })
   const secondPage = await getPostRevisions(post, {
@@ -123,15 +120,16 @@ test('returns a subsequent revision page', async () => {
     after: firstPage.pageInfo.endCursor,
   })
 
-  assert.deepEqual(
-    secondPage.nodes.map(({ revisionNumber }) => revisionNumber),
-    [3, 2],
-  )
-  assert.equal(secondPage.pageInfo.hasNextPage, true)
-  assert.equal(secondPage.pageInfo.hasPreviousPage, true)
+  expect(secondPage.nodes.map(({ revisionNumber }) => revisionNumber)).toEqual([
+    3, 2,
+  ])
+  expect(secondPage.pageInfo.hasNextPage).toBe(true)
+  expect(secondPage.pageInfo.hasPreviousPage).toBe(true)
 })
 
-test('root query resolver delegates to the revision connection', async () => {
+test('root query resolver delegates to the revision connection', {
+  tags: ['integration'],
+}, async () => {
   const connection = await callPostRevisionsResolver(
     null,
     {
@@ -141,33 +139,32 @@ test('root query resolver delegates to the revision connection', async () => {
     administratorContext,
   )
 
-  assert.deepEqual(
-    connection.nodes.map(({ revisionNumber }) => revisionNumber),
-    [5, 4],
-  )
-  assert.equal(connection.pageInfo.hasNextPage, true)
+  expect(connection.nodes.map(({ revisionNumber }) => revisionNumber)).toEqual([
+    5, 4,
+  ])
+  expect(connection.pageInfo.hasNextPage).toBe(true)
 })
 
-test('root query resolver rejects a missing post', async () => {
-  await assert.rejects(
+test('root query resolver rejects a missing post', {
+  tags: ['unit'],
+}, async () => {
+  await expect(
     callPostRevisionsResolver(
       null,
       { postId: 'missing-post' },
       administratorContext,
     ),
-    { message: 'Post not found' },
-  )
+  ).rejects.toThrow('Post not found')
 })
 
-test('rejects invalid and cross-post cursors', async () => {
+test('rejects invalid and cross-post cursors', { tags: ['unit'] }, async () => {
   const post = await requirePost('post-with-revisions')
-  await assert.rejects(
+  await expect(
     getPostRevisions(post, { after: 'not-a-valid-cursor' }),
-    { message: 'Invalid revision cursor' },
+  ).rejects.toThrow('Invalid revision cursor')
+  await expect(getPostRevisions(post, { after: '' })).rejects.toThrow(
+    'Invalid revision cursor',
   )
-  await assert.rejects(getPostRevisions(post, { after: '' }), {
-    message: 'Invalid revision cursor',
-  })
 
   const otherConnection = await getPostRevisions(
     await requirePost('large-post'),
@@ -175,18 +172,19 @@ test('rejects invalid and cross-post cursors', async () => {
       first: 1,
     },
   )
-  await assert.rejects(
+  await expect(
     getPostRevisions(post, { after: otherConnection.pageInfo.endCursor }),
-    { message: 'Invalid revision cursor' },
-  )
+  ).rejects.toThrow('Invalid revision cursor')
 })
 
-test('returns an empty connection when there are no revisions', async () => {
+test('returns an empty connection when there are no revisions', {
+  tags: ['unit'],
+}, async () => {
   const connection = await getPostRevisions(await requirePost('empty-post'))
 
-  assert.deepEqual(connection.edges, [])
-  assert.deepEqual(connection.nodes, [])
-  assert.deepEqual(connection.pageInfo, {
+  expect(connection.edges).toEqual([])
+  expect(connection.nodes).toEqual([])
+  expect(connection.pageInfo).toEqual({
     hasNextPage: false,
     hasPreviousPage: false,
     startCursor: null,
@@ -194,16 +192,16 @@ test('returns an empty connection when there are no revisions', async () => {
   })
 })
 
-test('enforces page-size limits', async () => {
+test('enforces page-size limits', { tags: ['unit'] }, async () => {
   const post = await requirePost('large-post')
   const connection = await getPostRevisions(post, { first: MAX_PAGE_SIZE })
 
-  assert.equal(connection.nodes.length, MAX_PAGE_SIZE)
-  assert.equal(connection.pageInfo.hasNextPage, true)
-  await assert.rejects(getPostRevisions(post, { first: MAX_PAGE_SIZE + 1 }), {
-    message: `first cannot exceed ${MAX_PAGE_SIZE}`,
-  })
-  await assert.rejects(getPostRevisions(post, { first: -1 }), {
-    message: 'first must be a non-negative integer',
-  })
+  expect(connection.nodes.length).toBe(MAX_PAGE_SIZE)
+  expect(connection.pageInfo.hasNextPage).toBe(true)
+  await expect(
+    getPostRevisions(post, { first: MAX_PAGE_SIZE + 1 }),
+  ).rejects.toThrow(`first cannot exceed ${MAX_PAGE_SIZE}`)
+  await expect(getPostRevisions(post, { first: -1 })).rejects.toThrow(
+    'first must be a non-negative integer',
+  )
 })

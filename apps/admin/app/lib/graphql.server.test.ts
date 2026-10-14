@@ -1,30 +1,30 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { expect, test } from 'vitest'
 import { resolveGraphQLUrl } from './graphql.server'
 
-test('uses the local HTTP fallback outside production', () => {
-  assert.equal(
-    resolveGraphQLUrl(undefined, 'development'),
+test('uses the local HTTP fallback outside production', {
+  tags: ['integration'],
+}, () => {
+  expect(resolveGraphQLUrl(undefined, 'development')).toBe(
     'http://localhost:4000/graphql',
   )
 })
 
-test('requires an explicit HTTPS GraphQL URL in production', () => {
-  assert.throws(() => resolveGraphQLUrl(undefined, 'production'), {
-    message: 'GRAPHQL_URL is required in production',
-  })
-  assert.throws(
-    () => resolveGraphQLUrl('http://api.example.com/graphql', 'production'),
-    { message: 'GRAPHQL_URL must use HTTPS in production' },
+test('requires an explicit HTTPS GraphQL URL in production', {
+  tags: ['unit'],
+}, () => {
+  expect(() => resolveGraphQLUrl(undefined, 'production')).toThrow(
+    'GRAPHQL_URL is required in production',
   )
-  assert.equal(
+  expect(() =>
+    resolveGraphQLUrl('http://api.example.com/graphql', 'production'),
+  ).toThrow('GRAPHQL_URL must use HTTPS in production')
+  expect(
     resolveGraphQLUrl('https://api.example.com/graphql', 'production'),
-    'https://api.example.com/graphql',
-  )
+  ).toBe('https://api.example.com/graphql')
 })
 
-test('rejects non-HTTP URL schemes', () => {
-  assert.throws(() => resolveGraphQLUrl('file:///tmp/graphql', 'development'), {
-    message: 'GRAPHQL_URL must use HTTP or HTTPS',
-  })
+test('rejects non-HTTP URL schemes', { tags: ['unit'] }, () => {
+  expect(() => resolveGraphQLUrl('file:///tmp/graphql', 'development')).toThrow(
+    'GRAPHQL_URL must use HTTP or HTTPS',
+  )
 })
