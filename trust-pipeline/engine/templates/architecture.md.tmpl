@@ -1,0 +1,58 @@
+# Architecture rules — {{PROJECT_NAME}}
+
+The rules every change is held to. They are enforced by the trust pipeline (see
+[AGENTS.md](../AGENTS.md) and the testing method); this document is the
+human-readable version so a reader — or the review layer — knows the standard.
+
+## Structure as-if-portable
+
+Every feature separates a **generic engine/method** from **project-specific
+rules/config**, and app code stays free of infrastructure concerns. Apply the
+same split everywhere — reusable parts keep their own dependencies and must not
+import app code. This is what makes later extraction mechanical instead of a
+refactor.
+
+## Size and complexity thresholds
+
+| Rule | Threshold | Mechanism |
+|---|---|---|
+| Line width | {{LINE_WIDTH}} | {{FORMATTER}} (`formatter.lineWidth`) |
+| Function length | ≤ {{MAX_FUNCTION_LOC}} LOC | structure AST check |
+| File length | ≤ {{MAX_FILE_LOC}} LOC | structure AST check |
+| Nesting depth | ≤ {{MAX_NESTING}} | structure AST check |
+| Cognitive complexity | ≤ {{MAX_COGNITIVE_COMPLEXITY}} | {{COMPLEXITY_RULE}} |
+| Nested callbacks | none excessive | {{NESTED_CALLBACK_RULE}} |
+| JSX inside `useMemo`/`useCallback` | forbidden ({{UI_APPS}}) | {{JSX_IN_MEMO_PLUGIN}} |
+| Duplication | ≤ {{MAX_DUPLICATION}}% | {{DUPLICATION_TOOL}} (scans stage) |
+
+Generated code ({{GENERATED_GLOBS}}), indexer config, and documentation markdown
+are not code and are exempt from these checks.
+
+## Backend layering (`{{BACKEND_DIR}}`)
+
+```text
+resolver → service → db
+```
+
+- **Resolvers** ({{RESOLVER_DIR}}) translate one field into a call. They may use
+  the {{AUTH_LAYER}} helpers to authorize. A resolver **must not call another
+  resolver**, and **must not touch the database** directly.
+- **Services** ({{SERVICE_DIR}}) own all database access and business rules, and
+  are the only layer in this path that imports {{DB_DIR}}.
+- **`{{DB_DIR}}`** holds the data schema and client; it knows nothing above it.
+
+This is architecture pattern #1 in the architecture suite ({{ARCH_TOOL}}), which
+runs in the pipeline's `scans` stage.
+
+## Frontend composition ({{UI_DIRS}})
+
+- **{{GRAPHQL_CLIENT}} is the GraphQL client layer.** Components request data
+  with it; do not hand-roll fetch calls.
+- **Compose components.** Extract a new component when a piece is more than
+  three things; do not grow one component into a whole page.
+- **No JSX produced inside `useMemo`/`useCallback`** — those return values, not
+  markup. Checked by the plugin above.
+- **Reuse hooks**; a behavior that belongs in a hook lives in a hook.
+- Split **server state** (query/route data) from **local or context state**; do
+  not duplicate one into the other.
+- Route modules stay thin and lazy-load client-only work.

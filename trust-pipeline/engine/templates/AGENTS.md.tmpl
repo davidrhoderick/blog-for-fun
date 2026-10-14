@@ -1,0 +1,32 @@
+# AGENTS.md — {{PROJECT_NAME}}
+
+Orientation for agents working in this repo. Read the rulebooks before changing
+code:
+
+- [{{ARCHITECTURE_DOC}}]({{ARCHITECTURE_DOC}}) — layering, composition, thresholds.
+- [{{TESTING_DOC}}]({{TESTING_DOC}}) — TDD, unit vs integration, coverage.
+
+## Trust pipeline
+
+Every task ends by running the local pipeline (`{{VERIFY_COMMAND}}`):
+
+```text
+{{PIPELINE_ORDER}}
+```
+
+It is **fail-fast**: a later stage does not run when an earlier one fails. The
+deterministic stages **block the agent** — you cannot finish a task while the
+pipeline is red. {{REVIEW_STAGE_NOTE}} Fix the cause and re-run; retries are
+bounded.
+
+## Running the apps
+
+{{APPS_TABLE}}
+
+{{DEV_SERVER_NOTE}}
+
+Codegen on demand:
+
+{{CODEGEN_COMMANDS}}
+
+The GraphQL client layer is **{{GRAPHQL_CLIENT}}**.
