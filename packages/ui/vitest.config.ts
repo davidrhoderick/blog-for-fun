@@ -6,6 +6,8 @@ export default defineConfig({
     passWithNoTests: true,
     tags: [{ name: 'unit' }, { name: 'integration', timeout: 30_000 }],
     coverage: {
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts'],
       thresholds: { lines: 80, branches: 80 },
     },
   },

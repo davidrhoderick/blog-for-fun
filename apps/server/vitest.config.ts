@@ -11,6 +11,13 @@ export default defineConfig({
     environment: 'node',
     tags: [{ name: 'unit' }, { name: 'integration', timeout: 30_000 }],
     coverage: {
+      include: ['src/**/*.ts'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/schema/*.generated.ts',
+        'src/db/migrate.ts',
+        'src/scripts/**',
+      ],
       thresholds: { lines: 80, branches: 80 },
     },
   },
