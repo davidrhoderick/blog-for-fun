@@ -4,7 +4,6 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: 'jsdom',
-    passWithNoTests: true,
     setupFiles: ['./test/setup.ts'],
     tags: [{ name: 'unit' }, { name: 'integration', timeout: 30_000 }],
     coverage: {

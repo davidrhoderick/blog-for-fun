@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { normalizeEmail, validateEmail } from './email'
 
-test('normalizes valid emails', { tags: ['integration'] }, () => {
+test('normalizes valid emails', { tags: ['unit'] }, () => {
   expect(normalizeEmail('  Admin@Example.COM ')).toBe('admin@example.com')
   expect(validateEmail(' Admin@Example.COM ')).toBe('admin@example.com')
 })

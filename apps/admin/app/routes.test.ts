@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import routes from './routes'
 
 test('wires the public, login, and authenticated routes', {
-  tags: ['integration'],
+  tags: ['unit'],
 }, () => {
   expect(routes).toHaveLength(4)
   expect(routes[0]).toMatchObject({

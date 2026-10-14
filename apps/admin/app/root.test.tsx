@@ -52,7 +52,7 @@ test('falls back for unknown error values', { tags: ['unit'] }, () => {
   expect(screen.getByText('An unexpected error occurred.')).toBeTruthy()
 })
 
-test('preloads the console fonts', { tags: ['integration'] }, () => {
+test('preloads the console fonts', { tags: ['unit'] }, () => {
   expect(links()).toHaveLength(3)
   expect(links()[0]).toMatchObject({ rel: 'preconnect' })
 })

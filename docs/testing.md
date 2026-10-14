@@ -19,13 +19,25 @@ package's config). The `integration` tag may carry a longer timeout.
   component through its data. Normal behavior is asserted here.
 - **Unit — edge cases only.** A unit test exists to pin a boundary the
   integration tests cannot reach: malformed input, empty case, permission
-  boundary, expiry. Nothing else.
+  boundary, expiry. Nothing else — except pure utilities, which have no system
+  to promote into (see below).
 
 ### Happy-path units are promoted, not kept
 
 A happy-path unit that a TDD pass produced is **promoted to an integration test
 and removed from the units**. TDD drives the function; whether the test ends up a
 unit or an integration depends on what it exercises, not on when it was written.
+
+### Pure utilities have no system to promote into
+
+The "edge cases only" rule assumes a system the happy path can move up into. A
+pure function (a class-name helper, a scalar parser, a password hasher) and a
+trivial config table (a route list) have no system — the function *is* the whole
+behaviour. Test those directly as `unit`, happy path included.
+
+`integration` keeps its meaning: behaviour exercised **through a system** — a
+resolver through its service and db, a component through its data, a route
+loader through a request.
 
 ### No `node:test` parity
 

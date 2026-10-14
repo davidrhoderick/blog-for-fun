@@ -28,7 +28,7 @@ const anonymousContext: AuthContext = {
 const codeOf = (error: unknown) =>
   (error as { extensions?: { code?: string } }).extensions?.code
 
-test('administrators hold every permission', { tags: ['integration'] }, () => {
+test('administrators hold every permission', { tags: ['unit'] }, () => {
   expect(hasPermission(['administrator'], 'posts:create')).toBe(true)
   expect(hasPermission(['administrator'], 'posts:delete')).toBe(true)
   expect(hasPermission([], 'posts:readUnpublished')).toBe(false)

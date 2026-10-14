@@ -7,7 +7,7 @@ import {
   verifyPassword,
 } from './password'
 
-test('hashes and verifies a password', { tags: ['integration'] }, async () => {
+test('hashes and verifies a password', { tags: ['unit'] }, async () => {
   const hash = await hashPassword('a long enough password')
 
   expect(hash).not.toContain('a long enough password')
