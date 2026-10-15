@@ -1,0 +1,11 @@
+// JSX must be rendered by the component, not produced by useMemo/useCallback,
+// which return values. See docs/architecture.md.
+// shortcut: a bare fragment (<></>) inside a hook is not matched; extend if it appears.
+
+or {
+  `useMemo($fn, $deps)`,
+  `useCallback($fn, $deps)`
+} where {
+  $fn <: contains jsx_element(),
+  register_diagnostic(span=$fn, message="Do not build JSX inside useMemo/useCallback; return a value and render markup in the component.")
+}

@@ -8,6 +8,12 @@
   "files": {
     "ignoreUnknown": false
   },
+  "plugins": [
+    {
+      "path": "./biome/plugins/no-jsx-in-memo.grit",
+      "includes": ["**/apps/admin/**", "**/apps/blog/**"]
+    }
+  ],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

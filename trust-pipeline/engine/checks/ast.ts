@@ -1,0 +1,132 @@
+import path from 'node:path'
+import ts from 'typescript'
+import { DEFAULT_IGNORE } from '../config'
+
+export const MAX_FILE_LINES = 400
+export const MAX_FUNCTION_LINES = 80
+export const MAX_NESTING = 4
+
+/** Globs whose files are not code; `checkSource` short-circuits on them. */
+export const IGNORE_GLOBS = DEFAULT_IGNORE
+
+export type Violation = {
+  rule: 'file-length' | 'function-length' | 'nesting'
+  file: string
+  line: number
+  message: string
+}
+
+const FUNCTION_KINDS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.FunctionDeclaration,
+  ts.SyntaxKind.FunctionExpression,
+  ts.SyntaxKind.ArrowFunction,
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.Constructor,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.SetAccessor,
+])
+
+const CONTROL_FLOW = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.IfStatement,
+  ts.SyntaxKind.ForStatement,
+  ts.SyntaxKind.ForInStatement,
+  ts.SyntaxKind.ForOfStatement,
+  ts.SyntaxKind.WhileStatement,
+  ts.SyntaxKind.DoStatement,
+  ts.SyntaxKind.SwitchStatement,
+  ts.SyntaxKind.TryStatement,
+  ts.SyntaxKind.ConditionalExpression,
+])
+
+/**
+ * True when a repo-relative path matches any glob. A glob without a slash
+ * (e.g. `*.generated.ts`) also matches the basename so it applies at any depth.
+ */
+export function isIgnored(
+  relPath: string,
+  globs: string[] = IGNORE_GLOBS,
+): boolean {
+  const base = path.basename(relPath)
+  return globs.some(
+    (glob) => path.matchesGlob(relPath, glob) || path.matchesGlob(base, glob),
+  )
+}
+
+/** Deepest control-flow nesting in a node, not descending into nested functions. */
+function maxNesting(node: ts.Node, depth = 0): number {
+  let max = depth
+  node.forEachChild((child) => {
+    if (FUNCTION_KINDS.has(child.kind)) return
+    const next = CONTROL_FLOW.has(child.kind) ? depth + 1 : depth
+    max = Math.max(max, next, maxNesting(child, next))
+  })
+  return max
+}
+
+const lineOf = (sourceFile: ts.SourceFile, pos: number): number =>
+  sourceFile.getLineAndCharacterOfPosition(pos).line + 1
+
+function collectFunctions(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  filePath: string,
+  out: Violation[],
+): void {
+  if (FUNCTION_KINDS.has(node.kind)) {
+    const line = lineOf(sourceFile, node.getStart(sourceFile))
+    const length = lineOf(sourceFile, node.getEnd()) - line + 1
+    if (length > MAX_FUNCTION_LINES) {
+      out.push({
+        rule: 'function-length',
+        file: filePath,
+        line,
+        message: `function is ${length} lines (max ${MAX_FUNCTION_LINES})`,
+      })
+    }
+    const depth = maxNesting(node)
+    if (depth > MAX_NESTING) {
+      out.push({
+        rule: 'nesting',
+        file: filePath,
+        line,
+        message: `nesting depth ${depth} (max ${MAX_NESTING})`,
+      })
+    }
+  }
+  node.forEachChild((child) =>
+    collectFunctions(child, sourceFile, filePath, out),
+  )
+}
+
+/** Size and nesting violations for one source file. Pure; no I/O. */
+export function checkSource(input: {
+  filePath: string
+  source: string
+}): Violation[] {
+  const { filePath, source } = input
+  if (isIgnored(filePath)) return []
+
+  const violations: Violation[] = []
+  const lines = source.replace(/\n$/, '').split('\n').length
+  if (lines > MAX_FILE_LINES) {
+    violations.push({
+      rule: 'file-length',
+      file: filePath,
+      line: 1,
+      message: `file is ${lines} lines (max ${MAX_FILE_LINES})`,
+    })
+  }
+
+  const scriptKind = /\.(tsx|jsx)$/.test(filePath)
+    ? ts.ScriptKind.TSX
+    : ts.ScriptKind.TS
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    scriptKind,
+  )
+  collectFunctions(sourceFile, sourceFile, filePath, violations)
+  return violations
+}

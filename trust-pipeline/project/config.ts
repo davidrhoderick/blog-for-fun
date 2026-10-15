@@ -9,7 +9,7 @@ export const config: ProjectConfig = {
     audit: true,
     lint: true,
     typecheck: true,
-    structure: false,
+    structure: true,
     test: true,
     scans: false,
     review: false,

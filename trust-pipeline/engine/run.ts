@@ -4,6 +4,7 @@ import type { ProjectConfig } from './config'
 import { type DoctorResult, doctor } from './doctor'
 import { auditStage } from './stages/audit'
 import { lintStage } from './stages/lint'
+import { structureStage } from './stages/structure'
 import { testStage } from './stages/test'
 import { typecheckStage } from './stages/typecheck'
 import type { Stage, StageResult } from './stages/types'
@@ -36,7 +37,13 @@ export async function runPipeline(
   return { ok: true, results }
 }
 
-const ALL_STAGES: Stage[] = [auditStage, lintStage, typecheckStage, testStage]
+const ALL_STAGES: Stage[] = [
+  auditStage,
+  lintStage,
+  structureStage,
+  typecheckStage,
+  testStage,
+]
 
 export function enabledStages(cfg: ProjectConfig): Stage[] {
   return ALL_STAGES.filter(
