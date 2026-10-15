@@ -6,6 +6,9 @@ or {
   `useMemo($fn, $deps)`,
   `useCallback($fn, $deps)`
 } where {
-  $fn <: contains jsx_element(),
+  $fn <: contains or {
+    jsx_element(),
+    jsx_self_closing_element()
+  },
   register_diagnostic(span=$fn, message="Do not build JSX inside useMemo/useCallback; return a value and render markup in the component.")
 }
