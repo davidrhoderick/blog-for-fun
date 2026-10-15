@@ -12,7 +12,7 @@ export const config: ProjectConfig = {
     structure: true,
     test: true,
     scans: true,
-    review: false,
+    review: true,
   },
   commands: {
     audit: 'pnpm audit --audit-level high',

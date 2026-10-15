@@ -130,3 +130,87 @@ export function checkSource(input: {
   collectFunctions(sourceFile, sourceFile, filePath, violations)
   return violations
 }
+
+/** A named declaration the review layer treats as one symbol. */
+export type RawSymbol = {
+  name: string
+  kind: string
+  start: number
+  end: number
+  text: string
+}
+
+/** A symbol's name usually tells us what it is. */
+function kindOf(name: string): string {
+  if (/^use[A-Z]/.test(name)) return 'hook'
+  return /^[A-Z]/.test(name) ? 'component' : 'function'
+}
+
+function record(
+  out: RawSymbol[],
+  sourceFile: ts.SourceFile,
+  owner: ts.Node,
+  name: string,
+  kind: string,
+): void {
+  out.push({
+    name,
+    kind,
+    start: lineOf(sourceFile, owner.getStart(sourceFile)),
+    end: lineOf(sourceFile, owner.getEnd()),
+    text: owner.getText(sourceFile),
+  })
+}
+
+/** Walk named declarations; nested callbacks stay inside the symbol that owns them. */
+function visit(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  out: RawSymbol[],
+): void {
+  if (ts.isFunctionDeclaration(node) && node.name) {
+    record(out, sourceFile, node, node.name.text, kindOf(node.name.text))
+    return
+  }
+  if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name)) {
+    record(out, sourceFile, node, node.name.text, 'method')
+    return
+  }
+  if (
+    ts.isVariableDeclaration(node) &&
+    ts.isIdentifier(node.name) &&
+    node.initializer &&
+    (ts.isArrowFunction(node.initializer) ||
+      ts.isFunctionExpression(node.initializer))
+  ) {
+    record(
+      out,
+      sourceFile,
+      node.parent.parent,
+      node.name.text,
+      kindOf(node.name.text),
+    )
+    return
+  }
+  node.forEachChild((child) => visit(child, sourceFile, out))
+}
+
+/**
+ * Named function-like declarations in one source file. The same walk as
+ * `checkSource`, narrowed to symbols rather than size violations.
+ */
+export function symbolsIn(source: string, filePath: string): RawSymbol[] {
+  const scriptKind = /\.(tsx|jsx)$/.test(filePath)
+    ? ts.ScriptKind.TSX
+    : ts.ScriptKind.TS
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  )
+  const out: RawSymbol[] = []
+  visit(sourceFile, sourceFile, out)
+  return out
+}

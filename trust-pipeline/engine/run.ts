@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { config } from '../project/config'
 import type { ProjectConfig } from './config'
 import { type DoctorResult, doctor } from './doctor'
+import { reviewStage } from './review/review'
 import { auditStage } from './stages/audit'
 import { lintStage } from './stages/lint'
 import { scansStage } from './stages/scans'
@@ -45,6 +46,7 @@ const ALL_STAGES: Stage[] = [
   typecheckStage,
   testStage,
   scansStage,
+  reviewStage,
 ]
 
 export function enabledStages(cfg: ProjectConfig): Stage[] {
