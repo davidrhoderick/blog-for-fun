@@ -30,6 +30,11 @@ WORKDIR /app
 
 COPY --from=build /app /app
 
+# Production image: drop devDependencies (the build above needed them). The
+# runtime keeps only prod deps, plus `tsx`, which the server and the Fly release
+# command use to run TypeScript directly.
+RUN pnpm install --prod --frozen-lockfile
+
 EXPOSE 8080
 
 ENTRYPOINT ["tini", "--"]

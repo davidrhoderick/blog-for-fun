@@ -278,6 +278,9 @@ importers:
       graphql-yoga:
         specifier: ^5.21.2
         version: 5.21.2(graphql@16.14.2)
+      tsx:
+        specifier: ^4.23.9
+        version: 4.23.9
     devDependencies:
       '@eddeee888/gcg-typescript-resolver-files':
         specifier: ^0.17.0
@@ -303,9 +306,6 @@ importers:
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
-      tsx:
-        specifier: ^4.23.9
-        version: 4.23.9
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
