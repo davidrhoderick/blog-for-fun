@@ -1,7 +1,7 @@
 # Review rubric
 
-Judgment questions the `review` stage asks Jev about each changed symbol. These
-are the rules the deterministic stages cannot see (see
+Judgment questions the `review` stage asks Jev. These are the rules the
+deterministic stages cannot see (see
 [docs/architecture.md](../../docs/architecture.md) and
 [docs/testing.md](../../docs/testing.md)).
 
@@ -10,8 +10,15 @@ Each `## <id>` section is one **Choice** question with two options, `pass` and
 `HIGH_CONFIDENCE` (0.8) fails the pipeline; a lower-confidence `fail` is listed
 as uncertain for the agent to escalate.
 
-Sections have three `field: text` lines: `question` (the Choice instructions),
-`pass` and `fail` (the option descriptions).
+Sections have a `question` line (the Choice instructions), `pass` and `fail`
+(the option descriptions), and an optional `scope: diff` line. Without a scope a
+question is asked of every changed symbol; with `scope: diff` it is asked once
+against the whole collected diff.
+
+TDD *order* — whether the test was written before the implementation — is not
+observable in a diff, so it is not a question here; it stays a process rule in
+[docs/testing.md](../../docs/testing.md). The diff-level question below judges
+the observable half: that the change ships a test pinning its new behavior.
 
 ## structure-one-thing
 
@@ -37,11 +44,12 @@ question: Does this change add a happy-path unit test that should instead be an 
 pass: No new happy-path unit test; unit tests added here pin an edge case only, or the symbol is not a test.
 fail: A happy-path unit test was added where the behavior could be exercised through a system as an integration test.
 
-## methodology-tdd-order
+## methodology-diff-test
 
-question: If this symbol is test code, does it pin the behavior of the code under test so it would fail if that behavior regressed, rather than testing implementation details or merely running the code?
-pass: This symbol is not test code, or it is a test that pins observable behavior and would fail if that behavior regressed.
-fail: This symbol is test code that would still pass if the behavior under test regressed, or that tests implementation details instead of behavior.
+scope: diff
+question: Does this change come with a test that pins the new behavior it introduces?
+pass: The diff adds or updates a test that exercises the new behavior, or the change introduces no new behavior to test.
+fail: The diff adds new behavior that no test in the diff exercises.
 
 ## methodology-meaningful-assertions
 

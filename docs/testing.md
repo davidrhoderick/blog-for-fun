@@ -2,12 +2,21 @@
 
 One runner: **Vitest**, one config per package. Tests prove behavior, not that
 lines ran. The pipeline runs them in the `test` stage; the rules it cannot see —
-order, intent — live here and are judged by the review layer.
+whether a change ships a test, and what its assertions mean — are judged by the
+review layer. TDD *order* is not one of them: it is a process rule this document
+owns (see below), not a pipeline check.
 
 ## TDD for new functions
 
 Write the failing test first, then the function, then make it pass. Reuse the
 `test-driven-development` skill; do not rebuild it.
+
+**Order is a process rule, not a pipeline check.** Whether the test was written
+*before* the implementation is not observable in a diff, so the review layer
+cannot judge it. The `test-driven-development` skill enforces the order; the
+review layer judges only the observable half — that a change ships a test pinning
+the new behavior it introduces (the rubric's diff-level `methodology-diff-test`
+question).
 
 ## Two kinds of test
 

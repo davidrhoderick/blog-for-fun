@@ -20,6 +20,8 @@ const RUBRIC = path.resolve(
 
 const MODEL = 'jev-1.13.0'
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
+/** The task base: nothing is committed until the pipeline is green, so it is HEAD. */
+const TASK_BASE = 'HEAD'
 /** Jev 1.13: 32k tokens for `state` plus the longest question. */
 export const STATE_BUDGET = 32_000
 const CHARS_PER_TOKEN = 4
@@ -32,9 +34,15 @@ export type Symbol = {
   after: string
 }
 
-export type Rubric = {
-  items: { id: string; question: string; options: [string, string] }[]
+export type RubricItem = {
+  id: string
+  question: string
+  options: [string, string]
+  /** `diff` asks once against the whole diff; default asks of each changed symbol. */
+  scope?: 'symbol' | 'diff'
 }
+
+export type Rubric = { items: RubricItem[] }
 
 type FileDiff = { file: string; ranges: [number, number][] }
 
@@ -121,7 +129,7 @@ export async function collectDiff(ref = 'HEAD'): Promise<string> {
 const sh = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 
 /** Changed symbols: whole-file AST declarations whose lines the diff touches. */
-export function collectSymbols(diff: string): Symbol[] {
+export function collectSymbols(diff: string, ref = TASK_BASE): Symbol[] {
   const root = repoRoot()
   const symbols: Symbol[] = []
   for (const { file, ranges } of parseDiff(diff)) {
@@ -129,7 +137,7 @@ export function collectSymbols(diff: string): Symbol[] {
     const after = readSource(root, file)
     if (after === undefined) continue
     const before = new Map(
-      symbolsIn(readSource(root, file, 'HEAD') ?? '', file).map((s) => [
+      symbolsIn(readSource(root, file, ref) ?? '', file).map((s) => [
         s.name,
         s,
       ]),
@@ -164,17 +172,28 @@ export function parseRubric(markdown: string): Rubric {
     const pass = field('pass')
     const fail = field('fail')
     if (id.trim() && question && pass && fail) {
-      items.push({ id: id.trim(), question, options: [pass, fail] })
+      items.push({
+        id: id.trim(),
+        question,
+        options: [pass, fail],
+        scope: field('scope') === 'diff' ? 'diff' : 'symbol',
+      })
     }
   }
   return { items }
 }
 
+/** Questions asked of each changed symbol (everything not scoped to the diff). */
+const symbolItems = (rubric: Rubric): RubricItem[] =>
+  rubric.items.filter((item) => item.scope !== 'diff')
+
 /** Greedy batches that keep each `state` inside the Jev budget. */
 export function batchSymbols(symbols: Symbol[], rubric: Rubric): Symbol[][] {
   const longest = Math.max(
     0,
-    ...rubric.items.map((i) => i.question.length + i.options.join('').length),
+    ...symbolItems(rubric).map(
+      (item) => item.question.length + item.options.join('').length,
+    ),
   )
   const budget =
     (STATE_BUDGET - Math.ceil(longest / CHARS_PER_TOKEN)) * CHARS_PER_TOKEN
@@ -196,6 +215,16 @@ export function batchSymbols(symbols: Symbol[], rubric: Rubric): Symbol[][] {
 }
 
 type ChoiceAnswer = { choice: string; confidence: number }
+
+/** A missing or unexpected answer is treated as an uncertain failure. */
+const toAnswer = (
+  item: RubricItem,
+  answer: ChoiceAnswer | undefined,
+): RubricAnswer => ({
+  question: item.question,
+  answer: answer?.choice === 'pass' ? 'pass' : 'fail',
+  confidence: answer?.confidence ?? 0,
+})
 
 // shortcut: no retry/backoff (the official SDK has one); add it if 429/529
 // responses start flaking the pipeline.
@@ -231,6 +260,7 @@ export async function reviewSymbols(
 ): Promise<Map<Symbol, RubricAnswer[]>> {
   const key = process.env.JEV_API_KEY
   if (!key) throw new Error('JEV_API_KEY not set')
+  const items = symbolItems(rubric)
   const reviewed = new Map<Symbol, RubricAnswer[]>(
     symbols.map((symbol) => [symbol, []]),
   )
@@ -247,7 +277,7 @@ export async function reviewSymbols(
     }
     const questions: Record<string, unknown> = {}
     batch.forEach((_, index) => {
-      for (const item of rubric.items) {
+      for (const item of items) {
         questions[`${index}:${item.id}`] = {
           type: 'choice',
           instructions: `Review \`symbols[${index}]\`: ${item.question}`,
@@ -259,17 +289,37 @@ export async function reviewSymbols(
     batch.forEach((symbol, index) => {
       const list = reviewed.get(symbol)
       if (!list) return
-      for (const item of rubric.items) {
-        const answer = answers[`${index}:${item.id}`]
-        list.push({
-          question: item.question,
-          answer: answer?.choice === 'pass' ? 'pass' : 'fail',
-          confidence: answer?.confidence ?? 0,
-        })
+      for (const item of items) {
+        list.push(toAnswer(item, answers[`${index}:${item.id}`]))
       }
     })
   }
   return reviewed
+}
+
+/**
+ * Diff-level questions: the whole collected diff as `state`, asked once.
+ * shortcut: one request holds the whole diff; chunk it if a task diff ever
+ * exceeds the 32k state budget.
+ */
+export async function reviewDiff(
+  diff: string,
+  rubric: Rubric,
+): Promise<RubricAnswer[]> {
+  const items = rubric.items.filter((item) => item.scope === 'diff')
+  if (items.length === 0) return []
+  const key = process.env.JEV_API_KEY
+  if (!key) throw new Error('JEV_API_KEY not set')
+  const questions: Record<string, unknown> = {}
+  for (const item of items) {
+    questions[item.id] = {
+      type: 'choice',
+      instructions: item.question,
+      criteria: { pass: item.options[0], fail: item.options[1] },
+    }
+  }
+  const answers = await askJev(diff, questions, key)
+  return items.map((item) => toAnswer(item, answers[item.id]))
 }
 
 export const reviewStage: Stage = {
@@ -284,7 +334,7 @@ export const reviewStage: Stage = {
       }
     }
     try {
-      return await reviewDiff()
+      return await runReview()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return { name: 'review', ok: false, output: `review failed: ${message}` }
@@ -292,39 +342,39 @@ export const reviewStage: Stage = {
   },
 }
 
-async function reviewDiff(): Promise<StageResult> {
-  const diff = await collectDiff('HEAD')
+async function runReview(): Promise<StageResult> {
+  const diff = await collectDiff(TASK_BASE)
   if (!diff.trim()) {
     return { name: 'review', ok: true, output: 'no changes' }
   }
   const rubric = parseRubric(readFileSync(RUBRIC, 'utf8'))
-  const symbols = collectSymbols(diff)
+  const symbols = collectSymbols(diff, TASK_BASE)
   if (symbols.length === 0) {
     return { name: 'review', ok: true, output: 'no changed symbols' }
   }
   const reviewed = await reviewSymbols(symbols, rubric)
-  const lines: string[] = []
-  const all: { symbol: Symbol; answer: RubricAnswer }[] = []
+  const entries: { label: string; answer: RubricAnswer }[] = []
   for (const [symbol, answers] of reviewed) {
     for (const answer of answers) {
-      lines.push(
-        `${symbol.file}:${symbol.name} — ${answer.question}: ${answer.answer} (${answer.confidence.toFixed(2)})`,
-      )
-      all.push({ symbol, answer })
+      entries.push({ label: `${symbol.file}:${symbol.name}`, answer })
     }
   }
-  const result = verdict(all.map((entry) => entry.answer))
-  const uncertain = all.filter(
+  for (const answer of await reviewDiff(diff, rubric)) {
+    entries.push({ label: 'diff', answer })
+  }
+  const lines = entries.map(
+    ({ label, answer }) =>
+      `${label} — ${answer.question}: ${answer.answer} (${answer.confidence.toFixed(2)})`,
+  )
+  const result = verdict(entries.map((entry) => entry.answer))
+  const uncertain = entries.filter(
     ({ answer }) =>
       answer.answer === 'fail' && !result.failures.includes(answer),
   )
   if (uncertain.length > 0) {
     lines.push(
       `uncertain (escalate): ${uncertain
-        .map(
-          ({ symbol, answer }) =>
-            `${symbol.file}:${symbol.name} — ${answer.question}`,
-        )
+        .map(({ label, answer }) => `${label} — ${answer.question}`)
         .join('; ')}`,
     )
   }

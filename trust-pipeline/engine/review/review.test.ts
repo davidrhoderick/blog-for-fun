@@ -13,6 +13,7 @@ import {
   collectSymbols,
   parseRubric,
   type Rubric,
+  reviewDiff,
   reviewStage,
   reviewSymbols,
 } from './review'
@@ -33,6 +34,19 @@ export function untouched(): number {
   return 1
 }
 `
+
+/** A stubbed Jev transport: answers every asked question the same way. */
+const stubJev = (choice: string, confidence: number) =>
+  vi.fn(async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as {
+      questions: Record<string, unknown>
+    }
+    const answers: Record<string, { choice: string; confidence: number }> = {}
+    for (const id of Object.keys(body.questions)) {
+      answers[id] = { choice, confidence }
+    }
+    return { ok: true, json: async () => ({ answers }) }
+  })
 
 let repo = ''
 
@@ -86,6 +100,7 @@ test('the shipped rubric parses into pass/fail Choice items', {
   expect(ids).toContain('frontend')
   expect(ids).toContain('methodology')
   expect(ids).toContain('architecture')
+  expect(rubric.items.filter((item) => item.scope === 'diff')).toHaveLength(1)
   for (const item of rubric.items) {
     expect(item.options).toHaveLength(2)
     expect(item.question.length).toBeGreaterThan(0)
@@ -136,19 +151,10 @@ test('batchSymbols splits so each state stays under the budget', {
   expect(batchSymbols([sized('a', 200_000)], rubric)).toHaveLength(1)
 })
 
-test('reviewSymbols asks one Choice per rubric item per symbol', {
+test('reviewSymbols asks one Choice per symbol item per symbol', {
   tags: ['integration'],
 }, async () => {
-  const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
-    const body = JSON.parse(init.body) as {
-      questions: Record<string, unknown>
-    }
-    const answers: Record<string, { choice: string; confidence: number }> = {}
-    for (const id of Object.keys(body.questions)) {
-      answers[id] = { choice: 'pass', confidence: 0.9 }
-    }
-    return { ok: true, json: async () => ({ answers }) }
-  })
+  const fetchMock = stubJev('pass', 0.9)
   vi.stubGlobal('fetch', fetchMock)
   process.env.JEV_API_KEY = 'test-key'
 
@@ -156,6 +162,12 @@ test('reviewSymbols asks one Choice per rubric item per symbol', {
     items: [
       { id: 'one', question: 'Does it do one thing?', options: ['yes', 'no'] },
       { id: 'two', question: 'Is it tested?', options: ['yes', 'no'] },
+      {
+        id: 'whole',
+        question: 'Whole diff?',
+        options: ['yes', 'no'],
+        scope: 'diff',
+      },
     ],
   }
   const symbol: ChangedSymbol = {
@@ -168,6 +180,7 @@ test('reviewSymbols asks one Choice per rubric item per symbol', {
 
   const reviewed = await reviewSymbols([symbol], rubric)
 
+  // The diff-scoped item is not asked of a symbol.
   expect(reviewed.get(symbol)).toEqual([
     { question: 'Does it do one thing?', answer: 'pass', confidence: 0.9 },
     { question: 'Is it tested?', answer: 'pass', confidence: 0.9 },
@@ -184,6 +197,85 @@ test('reviewSymbols asks one Choice per rubric item per symbol', {
     instructions: 'Review `symbols[0]`: Does it do one thing?',
     criteria: { pass: 'yes', fail: 'no' },
   })
+
+  vi.unstubAllGlobals()
+  delete process.env.JEV_API_KEY
+})
+
+test('reviewDiff asks diff-scoped questions once against the whole diff', {
+  tags: ['integration'],
+}, async () => {
+  const fetchMock = stubJev('pass', 0.9)
+  vi.stubGlobal('fetch', fetchMock)
+  process.env.JEV_API_KEY = 'test-key'
+
+  const rubric: Rubric = {
+    items: [
+      { id: 'symbol-q', question: 'Per symbol?', options: ['yes', 'no'] },
+      {
+        id: 'diff-q',
+        question: 'Does it ship a test?',
+        options: ['yes', 'no'],
+        scope: 'diff',
+      },
+    ],
+  }
+
+  const answers = await reviewDiff('DIFF TEXT', rubric)
+
+  expect(answers).toEqual([
+    { question: 'Does it ship a test?', answer: 'pass', confidence: 0.9 },
+  ])
+  const [, init] = fetchMock.mock.calls[0] ?? []
+  const body = JSON.parse(init?.body ?? '{}')
+  expect(body.state).toBe('DIFF TEXT')
+  expect(Object.keys(body.questions)).toEqual(['diff-q'])
+
+  vi.unstubAllGlobals()
+  delete process.env.JEV_API_KEY
+})
+
+test('reviewDiff is a no-op when the rubric has no diff-scoped item', {
+  tags: ['unit'],
+}, async () => {
+  const rubric: Rubric = {
+    items: [{ id: 'q', question: 'Q?', options: ['yes', 'no'] }],
+  }
+
+  expect(await reviewDiff('DIFF', rubric)).toEqual([])
+})
+
+test('the review stage fails when the verdict fails', {
+  tags: ['integration'],
+}, async () => {
+  const fetchMock = stubJev('fail', 0.95)
+  vi.stubGlobal('fetch', fetchMock)
+  process.env.JEV_API_KEY = 'test-key'
+
+  const result = await reviewStage.run(config)
+
+  expect(result.ok).toBe(false)
+  expect(result.output).toContain('verdict: FAIL')
+  expect(fetchMock).toHaveBeenCalled()
+
+  vi.unstubAllGlobals()
+  delete process.env.JEV_API_KEY
+})
+
+test('the review stage passes on an empty diff without calling the model', {
+  tags: ['integration'],
+}, async () => {
+  // Commit the fixture so the working tree matches HEAD.
+  execFileSync('git', ['add', '.'], { cwd: repo })
+  execFileSync('git', ['commit', '-qm', 'changes'], { cwd: repo })
+  const fetchMock = stubJev('fail', 0.99)
+  vi.stubGlobal('fetch', fetchMock)
+  process.env.JEV_API_KEY = 'test-key'
+
+  const result = await reviewStage.run(config)
+
+  expect(result).toEqual({ name: 'review', ok: true, output: 'no changes' })
+  expect(fetchMock).not.toHaveBeenCalled()
 
   vi.unstubAllGlobals()
   delete process.env.JEV_API_KEY
