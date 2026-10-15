@@ -9,6 +9,7 @@ COPY apps/blog/package.json apps/blog/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/graphql-runtime/package.json packages/graphql-runtime/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY trust-pipeline/package.json trust-pipeline/package.json
 
 RUN pnpm install --frozen-lockfile
 

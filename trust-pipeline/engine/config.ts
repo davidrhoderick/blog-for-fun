@@ -25,6 +25,8 @@ export interface ProjectConfig {
     typecheck: string
     test: string
     codegen: string
+    /** Codegen for the apps only (Relay + router types); the server's dev watcher covers the GraphQL schema. */
+    codegenApps: string
     /** Scan commands, run in order; any non-zero fails the stage. */
     scans: string[]
   }

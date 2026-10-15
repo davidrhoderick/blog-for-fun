@@ -4,6 +4,7 @@
     "verify": "pnpm --filter trust-pipeline run verify",
     "graphql:generate": "pnpm --filter server run dev:codegen",
     "codegen": "pnpm --filter server run dev:codegen && pnpm --filter admin run codegen && pnpm --filter blog run codegen",
+    "codegen:apps": "pnpm --filter admin run codegen && pnpm --filter blog run codegen",
     "test": "pnpm -r --workspace-concurrency=1 run test",
     "test:coverage": "pnpm -r --workspace-concurrency=1 run test:coverage"
   },

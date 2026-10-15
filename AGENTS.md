@@ -27,13 +27,15 @@ its verdict fails. Fix the cause and re-run; retries are bounded.
 | Admin UI (`admin`) | `pnpm --filter admin run dev` | 3001 |
 | Blog (`blog`) | `pnpm --filter blog run dev` | 3000 |
 
-The server's `dev` also runs the **codegen watcher** (GraphQL schema). While it
-is up, the generated GraphQL/Relay/route types are current, so the pipeline
-detects the listening port and skips codegen. Stop it and the pipeline generates
-first.
+The server's `dev` watches **only the GraphQL schema** — not the admin's Relay
+artifacts or the apps' React Router types. So when the pipeline sees port 4000
+listening it still runs the app codegen (`pnpm codegen:apps`); with the server
+down it runs the full `pnpm codegen` (schema → admin → blog).
 
 Codegen on demand:
 
+- Everything: `pnpm codegen` (GraphQL schema → admin → blog)
+- Apps only: `pnpm codegen:apps` (admin + blog; use when the server watcher is up)
 - GraphQL schema: `pnpm --filter server run dev:codegen`
 - Admin: Relay artifacts + `react-router typegen`
 - Blog: `react-router typegen`

@@ -24,6 +24,21 @@ afterAll(() => process.chdir(originalCwd))
 const RESOLVERS = '^(?!.*\\.generated\\.)(?!.*\\.test\\.).*/resolvers/.*'
 const SERVER_SOURCE = '^(?!.*\\.generated\\.)(?!.*\\.test\\.)src/.*'
 
+// tsarch exposes no file list, so count a precondition's matches through the
+// public API: `shouldNot().matchPattern('.*')` yields one violation per matched
+// file. Guards against a label/root change that silently checks nothing.
+async function resolvedFileCount(
+  tsconfig: string,
+  pattern: string,
+): Promise<number> {
+  const violations = await filesOfProject(tsconfig)
+    .matchingPattern(pattern)
+    .shouldNot()
+    .matchPattern('.*')
+    .check()
+  return violations.length
+}
+
 test('resolvers do not depend on other resolvers', {
   tags: ['integration'],
 }, async () => {
@@ -34,6 +49,7 @@ test('resolvers do not depend on other resolvers', {
     .inFolder('resolvers')
     .check()
 
+  expect(await resolvedFileCount(serverTsconfig, RESOLVERS)).toBeGreaterThan(0)
   expect(violations).toEqual([])
 })
 
@@ -47,6 +63,7 @@ test('resolvers do not touch the database', {
     .inFolder('db')
     .check()
 
+  expect(await resolvedFileCount(serverTsconfig, RESOLVERS)).toBeGreaterThan(0)
   expect(violations).toEqual([])
 })
 
@@ -59,6 +76,9 @@ test('the server source graph is cycle-free', {
     .beFreeOfCycles()
     .check()
 
+  expect(
+    await resolvedFileCount(serverTsconfig, SERVER_SOURCE),
+  ).toBeGreaterThan(0)
   expect(violations).toEqual([])
 })
 

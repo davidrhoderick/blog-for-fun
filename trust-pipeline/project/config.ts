@@ -20,6 +20,7 @@ export const config: ProjectConfig = {
     typecheck: 'pnpm -r --workspace-concurrency=1 run typecheck',
     test: 'pnpm test',
     codegen: 'pnpm codegen',
+    codegenApps: 'pnpm codegen:apps',
     scans: [
       'osv-scanner scan -L pnpm-lock.yaml --format json --config trust-pipeline/project/osv-scanner.toml',
       'opengrep scan --config trust-pipeline/project/rules --severity ERROR --error --disable-version-check --sarif-output report/opengrep.sarif apps packages trust-pipeline',

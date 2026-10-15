@@ -130,10 +130,16 @@ to source, not to generated, doc, or test code.
 ## Codegen and the dev server
 
 Codegen (GraphQL schema, Relay artifacts, React Router types) must be fresh
-before typechecking. The dev server watches it: `pnpm --filter server run dev`
-runs the codegen watcher alongside the API. While that is up, codegen is already
-current, so the pipeline **detects the running dev server** (a listening port
-from `project/config.ts`) and runs codegen **only when it is not up**.
+before typechecking. The server's dev server watches **only the GraphQL schema**:
+`pnpm --filter server run dev` runs the schema codegen watcher alongside the API.
+It does **not** regenerate the admin's Relay artifacts or either app's React
+Router types. So the pipeline **detects the running dev server** (a listening
+port from `project/config.ts`) and chooses the codegen accordingly:
+
+- **port up** → the schema is already current, so it runs the **app** codegen
+  (`pnpm codegen:apps`: admin Relay + router types, blog router types).
+- **port down** → it runs the **full** codegen (`pnpm codegen`: schema → admin →
+  blog).
 
 The engine reads that state live (a port check) rather than persisting a flag, so
 stale state can never make it skip codegen wrongly. `AGENTS.md` documents how to
@@ -345,7 +351,8 @@ unit-tested directly.
 - Typecheck (`tsc --noEmit`, per package, run **serially**) is a stage between
   lint+structure and test; `server`, `packages/ui`, and `packages/graphql-runtime`
   gain a `typecheck` script and a `typescript` dependency. Codegen runs once
-  before the packages are typechecked, **unless the dev server is detected** (see
+  before the packages are typechecked; when the dev server is detected only the
+  app codegen runs, since its watcher covers the GraphQL schema (see
   Codegen and the dev server); each package's `typecheck` is plain `tsc`.
 - `trust-pipeline` has its own `tsconfig.json` and `typecheck`, and is linted,
   typechecked, and tested like any other package (the pipeline runs on itself),
