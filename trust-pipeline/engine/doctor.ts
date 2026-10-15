@@ -72,9 +72,10 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'JEV_API_KEY',
-    // The key lives in the repo-root .env (gitignored) or the environment.
-    check: 'test -n "$JEV_API_KEY" || grep -q "^JEV_API_KEY=" .env',
-    hint: 'add JEV_API_KEY=... to .env',
+    // The key lives in the pipeline's own .env (gitignored) or the environment.
+    check:
+      'test -n "$JEV_API_KEY" || grep -q "^JEV_API_KEY=" trust-pipeline/.env',
+    hint: 'add JEV_API_KEY=... to trust-pipeline/.env',
     stage: 'review',
     checkFromRoot: true,
   },

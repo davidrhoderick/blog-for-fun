@@ -291,7 +291,7 @@ test('the review stage fails when the key is missing', {
 
   expect(result.ok).toBe(false)
   expect(result.output).toBe(
-    'review failed: JEV_API_KEY not set (add it to .env)',
+    'review failed: JEV_API_KEY not set (add it to trust-pipeline/.env)',
   )
   if (saved !== undefined) process.env.JEV_API_KEY = saved
 })

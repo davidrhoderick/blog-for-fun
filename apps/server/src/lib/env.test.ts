@@ -1,5 +1,8 @@
 import { expect, test, vi } from 'vitest'
 
+// Never load a real .env: these cases own the environment they assert on.
+vi.mock('dotenv', () => ({ config: () => ({}) }))
+
 test('exposes the libsql connection settings', {
   tags: ['integration'],
 }, async () => {

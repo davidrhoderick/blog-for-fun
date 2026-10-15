@@ -8,10 +8,10 @@ import { exec } from '../exec'
 import type { Stage, StageResult } from '../stages/types'
 import { type RubricAnswer, verdict } from './verdict'
 
-/** Repo root, so `.env` resolves whatever the cwd is. */
-const ROOT = path.resolve(
+/** The pipeline's own `.env`, beside its package, whatever the cwd is. */
+const ENV = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../..',
+  '../../.env',
 )
 const RUBRIC = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -325,13 +325,14 @@ export async function reviewDiff(
 export const reviewStage: Stage = {
   name: 'review',
   async run() {
-    loadEnv({ path: path.join(ROOT, '.env'), quiet: true })
+    loadEnv({ path: ENV, quiet: true })
     if (!process.env.JEV_API_KEY) {
       // Defensive: the doctor already requires the key when review is enabled.
       return {
         name: 'review',
         ok: false,
-        output: 'review failed: JEV_API_KEY not set (add it to .env)',
+        output:
+          'review failed: JEV_API_KEY not set (add it to trust-pipeline/.env)',
       }
     }
     try {

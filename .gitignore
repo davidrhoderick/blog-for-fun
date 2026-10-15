@@ -4,6 +4,7 @@ apps/server/src/schema/*.generated.ts
 apps/server/src/schema/schema.generated.graphqls
 apps/server/src/schema/schema.generated.graphql
 apps/server/.local/
+apps/server/*.db
 coverage/
 report/
 .serena/
