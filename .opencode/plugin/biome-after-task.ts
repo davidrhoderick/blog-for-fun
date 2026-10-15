@@ -1,10 +1,14 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { Plugin } from '@opencode/plugin'
+import { retryOptions } from '../../trust-pipeline/engine/retry'
 
 const execFileAsync = promisify(execFile)
 
-const followUp = `Run \`pnpm exec biome check .\`. Fix every diagnostic intentionally, then run \`pnpm exec biome format --write .\` and rerun \`pnpm exec biome check .\`. Do not use suppressions, ignores, or weaker configuration to bypass diagnostics. Reply with exactly one concise sentence stating the final outcome; do not include headings, command lists, progress updates, or explanations.`
+const AUTOMATIC_ATTEMPTS = 3
+const OTHER_INSTRUCTIONS = 'Give other instructions'
+
+type RetryState = { spent: number; remaining: number }
 
 const getWorktreeStatus = async (directory: string) => {
   try {
@@ -17,8 +21,101 @@ const getWorktreeStatus = async (directory: string) => {
   }
 }
 
+const runVerify = async (directory: string) => {
+  try {
+    const { stdout, stderr } = await execFileAsync('pnpm', ['verify'], {
+      cwd: directory,
+      maxBuffer: 32 * 1024 * 1024,
+    })
+    return { ok: true, output: `${stdout}${stderr}` }
+  } catch (error) {
+    const failed = error as { stdout?: string; stderr?: string }
+    return { ok: false, output: `${failed.stdout ?? ''}${failed.stderr ?? ''}` }
+  }
+}
+
+const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
+
+const loadState = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+): Promise<RetryState> => {
+  const stored = (await ctx.storage.get(stateKey(sessionID))) as
+    | RetryState
+    | undefined
+  return stored ?? { spent: 0, remaining: AUTOMATIC_ATTEMPTS }
+}
+
+const saveState = (ctx: Plugin.Context, sessionID: string, state: RetryState) =>
+  ctx.storage.set(stateKey(sessionID), state)
+
+// Runs the pipeline after a task. Green resets the session; red spends one
+// automatic attempt, and once none remain the agent is told to ask the user.
+const gateSession = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+  previousStatus: string | null,
+  currentStatus: string | null,
+): Promise<void> => {
+  if (
+    previousStatus !== null &&
+    currentStatus !== null &&
+    previousStatus === currentStatus
+  ) {
+    return
+  }
+
+  const { ok, output } = await runVerify(ctx.location.directory)
+  if (ok) {
+    await ctx.storage.remove(stateKey(sessionID))
+    return
+  }
+
+  const state = await loadState(ctx, sessionID)
+  const remaining = Math.max(state.remaining - 1, 0)
+  await saveState(ctx, sessionID, { spent: state.spent, remaining })
+  const grants = retryOptions(state.spent).map((n) => `Try again (${n})`)
+  await ctx.session.prompt({
+    sessionID,
+    text:
+      remaining > 0
+        ? `\`pnpm verify\` failed. Fix the reported failures intentionally — no suppressions, ignores, or weaker configuration. Do not run the pipeline yourself; it runs again automatically when you stop. ${remaining} automatic attempt${remaining === 1 ? '' : 's'} remain before you must ask the user.\n\n${output.slice(-2000).trim()}`
+        : `\`pnpm verify\` is still failing and the automatic retry budget is exhausted. Stop working now and ask the user what to do next with the \`question\` tool, offering exactly these options in this order: ${[...grants, OTHER_INSTRUCTIONS].map((option) => `"${option}"`).join(', ')}. Do not run the pipeline yourself.`,
+  })
+}
+
+// The plugin cannot call the `question` tool, so it watches the answer the
+// agent collects: a granted budget advances the ladder, other instructions
+// do not.
+// shortcut: assumes the question tool's result metadata carries `answers` as
+// string[][]; if that shape changes the ladder stops shrinking (the gate still
+// blocks). Upgrade by subscribing to the question.replied event instead.
+const applyAnswer = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+  metadata: unknown,
+): Promise<void> => {
+  const state = await loadState(ctx, sessionID)
+  if (state.remaining > 0) return
+
+  const answers = (metadata as { answers?: unknown } | undefined)?.answers
+  const [first] = Array.isArray(answers) ? answers : []
+  const answer =
+    Array.isArray(first) && typeof first[0] === 'string' ? first[0] : undefined
+
+  if (answer === OTHER_INSTRUCTIONS) {
+    await saveState(ctx, sessionID, { spent: state.spent, remaining: 1 })
+    return
+  }
+  const grant = retryOptions(state.spent).find(
+    (attempts) => answer === `Try again (${attempts})`,
+  )
+  if (grant === undefined) return
+  await saveState(ctx, sessionID, { spent: state.spent + 1, remaining: grant })
+}
+
 export default {
-  id: 'biome-after-task',
+  id: 'pipeline-after-task',
   async setup(ctx: Plugin.Context) {
     const directory = ctx.location.directory
     const pendingSessions = new Set<string>()
@@ -26,15 +123,16 @@ export default {
     const controller = new AbortController()
 
     await ctx.session.hook('prompt', async (event) => {
-      if (event.prompt.text === followUp) {
-        return
-      }
-
       worktreeStatusBySession.set(
         event.sessionID,
         await getWorktreeStatus(directory),
       )
       pendingSessions.add(event.sessionID)
+    })
+
+    await ctx.tool.hook('execute.after', async (event) => {
+      if (event.tool !== 'question' || event.status !== 'completed') return
+      await applyAnswer(ctx, event.sessionID, event.result.metadata)
     })
 
     void (async () => {
@@ -48,22 +146,15 @@ export default {
           continue
         }
 
-        const previousStatus = worktreeStatusBySession.get(event.data.sessionID)
-        worktreeStatusBySession.delete(event.data.sessionID)
-        const currentStatus = await getWorktreeStatus(directory)
-
-        if (
-          previousStatus !== null &&
-          currentStatus !== null &&
-          previousStatus === currentStatus
-        ) {
-          continue
-        }
-
-        await ctx.session.prompt({
-          sessionID: event.data.sessionID,
-          text: followUp,
-        })
+        const sessionID = event.data.sessionID
+        const previousStatus = worktreeStatusBySession.get(sessionID)
+        worktreeStatusBySession.delete(sessionID)
+        await gateSession(
+          ctx,
+          sessionID,
+          previousStatus ?? null,
+          await getWorktreeStatus(directory),
+        )
       }
     })()
 
