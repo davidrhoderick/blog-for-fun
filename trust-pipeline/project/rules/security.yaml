@@ -21,15 +21,33 @@ rules:
     severity: ERROR
     message: child_process.exec runs a shell; use spawn/execFile with an argv array.
     patterns:
-      # Namespace/require forms only: a bare `exec(...)` would also match any
-      # local helper named `exec` (this repo has one in engine/exec.ts).
       - pattern-either:
+          # Namespace/require forms.
           - pattern: child_process.exec(...)
           - pattern: child_process.execSync(...)
           - pattern: require("child_process").exec(...)
           - pattern: require("node:child_process").exec(...)
           - pattern: require("child_process").execSync(...)
           - pattern: require("node:child_process").execSync(...)
+          # Destructured import form: bind the imported name, then match calls
+          # of it. A bare `exec(...)` is avoided because it would also match
+          # this repo's own helper in engine/exec.ts.
+          - patterns:
+              - pattern-inside: |
+                  import { $EXEC } from "node:child_process"
+                  ...
+              - pattern: $EXEC(...)
+              - metavariable-regex:
+                  metavariable: $EXEC
+                  regex: ^(exec|execSync)$
+          - patterns:
+              - pattern-inside: |
+                  import { $EXEC } from "child_process"
+                  ...
+              - pattern: $EXEC(...)
+              - metavariable-regex:
+                  metavariable: $EXEC
+                  regex: ^(exec|execSync)$
 
   - id: hardcoded-secret
     languages: [typescript, javascript]

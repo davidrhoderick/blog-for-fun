@@ -327,10 +327,11 @@ export const reviewStage: Stage = {
   async run() {
     loadEnv({ path: path.join(ROOT, '.env'), quiet: true })
     if (!process.env.JEV_API_KEY) {
+      // Defensive: the doctor already requires the key when review is enabled.
       return {
         name: 'review',
-        ok: true,
-        output: 'review skipped: JEV_API_KEY not set',
+        ok: false,
+        output: 'review failed: JEV_API_KEY not set (add it to .env)',
       }
     }
     try {

@@ -281,7 +281,7 @@ test('the review stage passes on an empty diff without calling the model', {
   delete process.env.JEV_API_KEY
 })
 
-test('the review stage skips and passes when the key is missing', {
+test('the review stage fails when the key is missing', {
   tags: ['unit'],
 }, async () => {
   const saved = process.env.JEV_API_KEY
@@ -289,7 +289,9 @@ test('the review stage skips and passes when the key is missing', {
 
   const result = await reviewStage.run(config)
 
-  expect(result.ok).toBe(true)
-  expect(result.output).toBe('review skipped: JEV_API_KEY not set')
+  expect(result.ok).toBe(false)
+  expect(result.output).toBe(
+    'review failed: JEV_API_KEY not set (add it to .env)',
+  )
   if (saved !== undefined) process.env.JEV_API_KEY = saved
 })

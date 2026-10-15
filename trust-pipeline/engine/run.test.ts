@@ -77,3 +77,21 @@ test('requires the scan tools only when the scans stage is enabled', {
   expect(on.ok).toBe(false)
   expect(on.missing.some((entry) => entry.includes('osv-scanner'))).toBe(true)
 })
+
+test('requires the JEV API key only when the review stage is enabled', {
+  tags: ['unit'],
+}, async () => {
+  const noKey: (tool: Tool) => Promise<boolean> = (tool) =>
+    Promise.resolve(tool.name !== 'JEV_API_KEY')
+  const withReview = (enabled: boolean) => ({
+    ...config,
+    stages: { ...config.stages, review: enabled },
+  })
+
+  const off = await doctor(withReview(false), noKey)
+  const on = await doctor(withReview(true), noKey)
+
+  expect(off).toEqual({ ok: true, missing: [] })
+  expect(on.ok).toBe(false)
+  expect(on.missing.some((entry) => entry.includes('JEV_API_KEY'))).toBe(true)
+})

@@ -9,6 +9,8 @@ export type Tool = {
   hint: string
   /** Stage that needs it; omitted means every run needs it. */
   stage?: keyof ProjectConfig['stages']
+  /** Run the check from the repo root (for repo-relative paths like `.env`). */
+  checkFromRoot?: boolean
 }
 
 export const TOOLS: Tool[] = [
@@ -68,6 +70,14 @@ export const TOOLS: Tool[] = [
     hint: 'cd trust-pipeline && pnpm add -D tsarch',
     stage: 'scans',
   },
+  {
+    name: 'JEV_API_KEY',
+    // The key lives in the repo-root .env (gitignored) or the environment.
+    check: 'test -n "$JEV_API_KEY" || grep -q "^JEV_API_KEY=" .env',
+    hint: 'add JEV_API_KEY=... to .env',
+    stage: 'review',
+    checkFromRoot: true,
+  },
 ]
 
 export type DoctorResult = { ok: boolean; missing: string[] }
@@ -79,7 +89,7 @@ export type DoctorResult = { ok: boolean; missing: string[] }
 export async function doctor(
   cfg: ProjectConfig,
   available: (tool: Tool) => Promise<boolean> = async (tool) =>
-    (await exec(tool.check)).ok,
+    (await exec(tool.check, tool.checkFromRoot ? cfg.root : undefined)).ok,
 ): Promise<DoctorResult> {
   const missing: string[] = []
   for (const tool of TOOLS) {

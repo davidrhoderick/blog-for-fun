@@ -8,9 +8,8 @@ project: every value arrives through `ProjectConfig` (see `config.ts`).
 ## Contract
 
 - **Belongs here:** orchestration (`run.ts`), stage wrappers (`stages/`), the
-  dependency check (`doctor.ts`), the retry ladder (`retry.ts`), the port probe
-  (`port.ts`), the AST helpers (`checks/`), the Jev harness and verdict
-  (`review/`), and `templates/`.
+  dependency check (`doctor.ts`), the retry ladder (`retry.ts`), the AST helpers
+  (`checks/`), the Jev harness and verdict (`review/`), and `templates/`.
 - **Does not belong here:** thresholds, commands, ignore globs, architecture
   patterns, scanner rules, or the rubric. Those live in `../project/`.
 - **Never imports app code** — nothing from `apps/`, `packages/`, or the app

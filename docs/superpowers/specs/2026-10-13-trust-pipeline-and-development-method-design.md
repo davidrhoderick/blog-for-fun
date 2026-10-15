@@ -133,17 +133,9 @@ Codegen (GraphQL schema, Relay artifacts, React Router types) must be fresh
 before typechecking. The server's dev server watches **only the GraphQL schema**:
 `pnpm --filter server run dev` runs the schema codegen watcher alongside the API.
 It does **not** regenerate the admin's Relay artifacts or either app's React
-Router types. So the pipeline **detects the running dev server** (a listening
-port from `project/config.ts`) and chooses the codegen accordingly:
-
-- **port up** → the schema is already current, so it runs the **app** codegen
-  (`pnpm codegen:apps`: admin Relay + router types, blog router types).
-- **port down** → it runs the **full** codegen (`pnpm codegen`: schema → admin →
-  blog).
-
-The engine reads that state live (a port check) rather than persisting a flag, so
-stale state can never make it skip codegen wrongly. `AGENTS.md` documents how to
-start, stop, and restart the apps and which ports they use.
+Router types. So the pipeline **always runs the full codegen** (`pnpm codegen`:
+schema → admin → blog), whether or not the dev server is up. `AGENTS.md`
+documents how to start, stop, and restart the apps and which ports they use.
 
 Each package's `typecheck` is plain `tsc --noEmit`; codegen is the pipeline's
 job, not the typecheck script's.
@@ -351,8 +343,8 @@ unit-tested directly.
 - Typecheck (`tsc --noEmit`, per package, run **serially**) is a stage between
   lint+structure and test; `server`, `packages/ui`, and `packages/graphql-runtime`
   gain a `typecheck` script and a `typescript` dependency. Codegen runs once
-  before the packages are typechecked; when the dev server is detected only the
-  app codegen runs, since its watcher covers the GraphQL schema (see
+  before the packages are typechecked; the server's watcher covers only the
+  GraphQL schema, so the pipeline always runs the full codegen (see
   Codegen and the dev server); each package's `typecheck` is plain `tsc`.
 - `trust-pipeline` has its own `tsconfig.json` and `typecheck`, and is linted,
   typechecked, and tested like any other package (the pipeline runs on itself),

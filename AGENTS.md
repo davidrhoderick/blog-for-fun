@@ -28,14 +28,12 @@ its verdict fails. Fix the cause and re-run; retries are bounded.
 | Blog (`blog`) | `pnpm --filter blog run dev` | 3000 |
 
 The server's `dev` watches **only the GraphQL schema** — not the admin's Relay
-artifacts or the apps' React Router types. So when the pipeline sees port 4000
-listening it still runs the app codegen (`pnpm codegen:apps`); with the server
-down it runs the full `pnpm codegen` (schema → admin → blog).
+artifacts or the apps' React Router types. So the pipeline always runs the full
+`pnpm codegen` (schema → admin → blog) before typechecking.
 
 Codegen on demand:
 
 - Everything: `pnpm codegen` (GraphQL schema → admin → blog)
-- Apps only: `pnpm codegen:apps` (admin + blog; use when the server watcher is up)
 - GraphQL schema: `pnpm --filter server run dev:codegen`
 - Admin: Relay artifacts + `react-router typegen`
 - Blog: `react-router typegen`
