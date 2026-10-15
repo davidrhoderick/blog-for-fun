@@ -1,0 +1,16 @@
+{
+  "minTokens": 100,
+  "minLines": 10,
+  "threshold": 3,
+  "format": ["typescript", "tsx"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/*.generated.ts",
+    "**/__generated__/**",
+    "**/.react-router/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ],
+  "reporters": ["console", "json"],
+  "output": "../report"
+}

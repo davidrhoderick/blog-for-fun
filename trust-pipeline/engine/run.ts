@@ -4,6 +4,7 @@ import type { ProjectConfig } from './config'
 import { type DoctorResult, doctor } from './doctor'
 import { auditStage } from './stages/audit'
 import { lintStage } from './stages/lint'
+import { scansStage } from './stages/scans'
 import { structureStage } from './stages/structure'
 import { testStage } from './stages/test'
 import { typecheckStage } from './stages/typecheck'
@@ -43,6 +44,7 @@ const ALL_STAGES: Stage[] = [
   structureStage,
   typecheckStage,
   testStage,
+  scansStage,
 ]
 
 export function enabledStages(cfg: ProjectConfig): Stage[] {

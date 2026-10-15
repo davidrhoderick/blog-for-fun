@@ -63,7 +63,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'tsarch',
-    check: 'pnpm exec tsarch --version',
+    // tsarch ships no CLI (it is a Vitest library); check the module resolves.
+    check: 'node -e "require.resolve(\'tsarch\')"',
     hint: 'cd trust-pipeline && pnpm add -D tsarch',
     stage: 'scans',
   },

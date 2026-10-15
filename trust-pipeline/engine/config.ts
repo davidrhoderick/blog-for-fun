@@ -25,6 +25,8 @@ export interface ProjectConfig {
     typecheck: string
     test: string
     codegen: string
+    /** Scan commands, run in order; any non-zero fails the stage. */
+    scans: string[]
   }
   thresholds: {
     maxFileLines: number

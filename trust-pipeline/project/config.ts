@@ -11,7 +11,7 @@ export const config: ProjectConfig = {
     typecheck: true,
     structure: true,
     test: true,
-    scans: false,
+    scans: true,
     review: false,
   },
   commands: {
@@ -20,6 +20,12 @@ export const config: ProjectConfig = {
     typecheck: 'pnpm -r --workspace-concurrency=1 run typecheck',
     test: 'pnpm test',
     codegen: 'pnpm codegen',
+    scans: [
+      'osv-scanner scan -L pnpm-lock.yaml --format json --config trust-pipeline/project/osv-scanner.toml',
+      'opengrep scan --config trust-pipeline/project/rules --severity ERROR --error --disable-version-check --sarif-output report/opengrep.sarif apps packages trust-pipeline',
+      'pnpm --filter trust-pipeline exec jscpd --config project/jscpd.json ../apps ../packages ../trust-pipeline',
+      'pnpm --filter trust-pipeline exec vitest run --config vitest.arch.config.ts',
+    ],
   },
   thresholds: {
     maxFileLines: 400,

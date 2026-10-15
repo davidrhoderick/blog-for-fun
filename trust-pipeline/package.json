@@ -12,6 +12,7 @@
     "@vitest/coverage-v8": "^5.0.4",
     "dotenv": "^17.4.2",
     "jscpd": "^5.4.1",
+    "tsarch": "^5.4.1",
     "tsx": "^4.23.9",
     "typescript": "^5.9.3",
     "vitest": "^5.0.4"

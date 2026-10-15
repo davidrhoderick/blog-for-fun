@@ -1,0 +1,47 @@
+# Hand-written, Semgrep-compatible rules for the local Opengrep scan.
+# Keep these few and true: every match must be a real defect in this repo.
+# Local only — never `--config auto` (that reaches the registry/network).
+rules:
+  - id: no-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: eval() executes arbitrary code; use a parser or explicit lookup.
+    patterns:
+      - pattern: eval(...)
+
+  - id: no-new-function
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: new Function() is eval by another name; use a parser instead.
+    patterns:
+      - pattern: new Function(...)
+
+  - id: no-child-process-exec
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: child_process.exec runs a shell; use spawn/execFile with an argv array.
+    patterns:
+      # Namespace/require forms only: a bare `exec(...)` would also match any
+      # local helper named `exec` (this repo has one in engine/exec.ts).
+      - pattern-either:
+          - pattern: child_process.exec(...)
+          - pattern: child_process.execSync(...)
+          - pattern: require("child_process").exec(...)
+          - pattern: require("node:child_process").exec(...)
+          - pattern: require("child_process").execSync(...)
+          - pattern: require("node:child_process").execSync(...)
+
+  - id: hardcoded-secret
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Possible hardcoded secret; read it from the environment instead.
+    patterns:
+      - pattern-either:
+          - pattern: const $KEY = "$VALUE"
+          - pattern: '$KEY: "$VALUE"'
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(.*_)?(secret|password|passwd|api[_-]?key|token|private[_-]?key)$
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^[A-Za-z0-9+/_=-]{16,}$
