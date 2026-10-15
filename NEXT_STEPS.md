@@ -1,5 +1,24 @@
 # Next steps
 
+## Open follow-ups
+
+- Confirm the Jev dashboard records usage. A `review` run makes real calls, but
+  no usage was visible in the dashboard afterwards. Check whether the key and
+  organization the pipeline calls match the dashboard being viewed before
+  assuming the calls are not landing.
+- Verify the Fly release command inside the built image. `pnpm --filter server
+  db:migrate && pnpm --filter server storage:configure-cors` runs with
+  production dependencies only, so confirm `tsx`, `drizzle-orm`, and
+  `@aws-sdk/client-s3` are sufficient there. The image builds and boots all four
+  PM2 processes, but the release path itself has never been executed.
+- Decide how `.opencode/` is checked. The plugin is neither typechecked nor
+  tested by `pnpm verify`; `tsc -p .opencode` runs only by hand. Decide before
+  that folder grows.
+- Decide whether dev layers should stop when opencode exits. Today they stop
+  only on `Ctrl-C`; see `AGENTS.md`. Any implementation belongs in
+  `.opencode/plugin/`, never in the trust pipeline, which stays generic and
+  extractable.
+
 ## Current handoff
 
 Work locally until CI/CD is established. Do not repeatedly deploy incomplete
