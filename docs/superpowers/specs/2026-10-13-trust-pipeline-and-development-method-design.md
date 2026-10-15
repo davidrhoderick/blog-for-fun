@@ -123,8 +123,9 @@ coverage thresholds are built in and more mature than Node's experimental
 Scorecard is dropped: it targets hosted repositories, not a local pre-merge gate.
 
 Generated code (`*.generated.ts`, `apps/admin/app/__generated__/**`), `.serena/`
-(indexer config), and documentation markdown are not code and are excluded from
-the checks.
+(indexer config), documentation markdown, and test files (`**/*.test.ts`,
+`**/*.test.tsx`) are excluded from the structure size rules — those rules apply
+to source, not to generated, doc, or test code.
 
 ## Codegen and the dev server
 
