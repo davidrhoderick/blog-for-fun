@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, expect, test } from 'vitest'
 import { config } from '../../project/config'
@@ -7,7 +8,7 @@ import { structureStage } from './structure'
 const roots: string[] = []
 
 function fixtureRoot(): string {
-  const root = mkdtempSync(path.join('/tmp/opencode', 'structure-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'structure-'))
   roots.push(root)
   return root
 }
