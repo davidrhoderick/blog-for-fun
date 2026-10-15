@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { filesOfProject } from 'tsarch'
@@ -17,8 +18,11 @@ afterAll(() => process.chdir(originalCwd))
 // tsarch reads `fileCondition` from a single precondition pattern, so both
 // guards are folded into one regex rather than chained (chaining loses the
 // tsconfig path and silently falls back to a guessed project).
+// Labels are relative to the tsconfig root (`apps/server`), so server files are
+// `src/...`, not `.../src/...` — SERVER_SOURCE must anchor at `src/` or it
+// matches no node and the cycle rule checks nothing.
 const RESOLVERS = '^(?!.*\\.generated\\.)(?!.*\\.test\\.).*/resolvers/.*'
-const SERVER_SOURCE = '^(?!.*\\.generated\\.)(?!.*\\.test\\.).*/src/.*'
+const SERVER_SOURCE = '^(?!.*\\.generated\\.)(?!.*\\.test\\.)src/.*'
 
 test('resolvers do not depend on other resolvers', {
   tags: ['integration'],
@@ -64,7 +68,7 @@ test('the server source graph is cycle-free', {
 test('resolves a workspace alias without false positives', {
   tags: ['integration'],
 }, async () => {
-  const dir = mkdtempSync(path.join('/tmp/opencode', 'tsarch-alias-'))
+  const dir = mkdtempSync(path.join(tmpdir(), 'tsarch-alias-'))
   try {
     writeFileSync(
       path.join(dir, 'tsconfig.json'),
