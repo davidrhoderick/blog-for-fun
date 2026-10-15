@@ -1,6 +1,7 @@
 // JSX must be rendered by the component, not produced by useMemo/useCallback,
 // which return values. See docs/architecture.md.
-// shortcut: a bare fragment (<></>) inside a hook is not matched; extend if it appears.
+// A fragment has no `jsx_*` node kind in Biome 2.5.15, so it is matched by
+// snippet instead.
 
 or {
   `useMemo($fn, $deps)`,
@@ -8,7 +9,8 @@ or {
 } where {
   $fn <: contains or {
     jsx_element(),
-    jsx_self_closing_element()
+    jsx_self_closing_element(),
+    `<>$children</>`
   },
   register_diagnostic(span=$fn, message="Do not build JSX inside useMemo/useCallback; return a value and render markup in the component.")
 }

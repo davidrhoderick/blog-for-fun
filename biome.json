@@ -55,5 +55,99 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "admin",
+                      "admin/**",
+                      "**/../admin",
+                      "**/../admin/**"
+                    ],
+                    "message": "apps/server must not import the admin app; share code through packages/ instead."
+                  },
+                  {
+                    "group": ["blog", "blog/**", "**/../blog", "**/../blog/**"],
+                    "message": "apps/server must not import the blog app; share code through packages/ instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/admin/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "server",
+                      "server/**",
+                      "**/../server",
+                      "**/../server/**"
+                    ],
+                    "message": "apps/admin must not import the server app; share code through packages/ instead."
+                  },
+                  {
+                    "group": ["blog", "blog/**", "**/../blog", "**/../blog/**"],
+                    "message": "apps/admin must not import the blog app; share code through packages/ instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/blog/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "server",
+                      "server/**",
+                      "**/../server",
+                      "**/../server/**"
+                    ],
+                    "message": "apps/blog must not import the server app; share code through packages/ instead."
+                  },
+                  {
+                    "group": [
+                      "admin",
+                      "admin/**",
+                      "**/../admin",
+                      "**/../admin/**"
+                    ],
+                    "message": "apps/blog must not import the admin app; share code through packages/ instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

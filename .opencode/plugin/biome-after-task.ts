@@ -1,14 +1,23 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { Plugin } from '@opencode/plugin'
-import { retryOptions } from '../../trust-pipeline/engine/retry'
+import {
+  matchRetryAnswer,
+  type RetryOption,
+  retryChoices,
+} from '../../trust-pipeline/engine/retry'
 
 const execFileAsync = promisify(execFile)
 
 const AUTOMATIC_ATTEMPTS = 3
-const OTHER_INSTRUCTIONS = 'Give other instructions'
 
-type RetryState = { spent: number; remaining: number }
+// The option list the plugin offered, stored alongside the session state so an
+// answer is matched against what was actually asked, never re-derived.
+type RetryState = {
+  spent: number
+  remaining: number
+  options: RetryOption[]
+}
 
 const getWorktreeStatus = async (directory: string) => {
   try {
@@ -43,7 +52,7 @@ const loadState = async (
   const stored = (await ctx.storage.get(stateKey(sessionID))) as
     | RetryState
     | undefined
-  return stored ?? { spent: 0, remaining: AUTOMATIC_ATTEMPTS }
+  return stored ?? { spent: 0, remaining: AUTOMATIC_ATTEMPTS, options: [] }
 }
 
 const saveState = (ctx: Plugin.Context, sessionID: string, state: RetryState) =>
@@ -73,20 +82,21 @@ const gateSession = async (
 
   const state = await loadState(ctx, sessionID)
   const remaining = Math.max(state.remaining - 1, 0)
-  await saveState(ctx, sessionID, { spent: state.spent, remaining })
-  const grants = retryOptions(state.spent).map((n) => `Try again (${n})`)
+  const options: RetryOption[] = remaining > 0 ? [] : retryChoices(state.spent)
+  await saveState(ctx, sessionID, { spent: state.spent, remaining, options })
   await ctx.session.prompt({
     sessionID,
     text:
       remaining > 0
         ? `\`pnpm verify\` failed. Fix the reported failures intentionally — no suppressions, ignores, or weaker configuration. Do not run the pipeline yourself; it runs again automatically when you stop. ${remaining} automatic attempt${remaining === 1 ? '' : 's'} remain before you must ask the user.\n\n${output.slice(-2000).trim()}`
-        : `\`pnpm verify\` is still failing and the automatic retry budget is exhausted. Stop working now and ask the user what to do next with the \`question\` tool, offering exactly these options in this order: ${[...grants, OTHER_INSTRUCTIONS].map((option) => `"${option}"`).join(', ')}. Do not run the pipeline yourself.`,
+        : `\`pnpm verify\` is still failing and the automatic retry budget is exhausted. Stop working now and ask the user what to do next with the \`question\` tool, offering exactly these options in this order: ${options.map((option) => `"${option.label}"`).join(', ')}. Do not run the pipeline yourself.`,
   })
 }
 
 // The plugin cannot call the `question` tool, so it watches the answer the
-// agent collects: a granted budget advances the ladder, other instructions
-// do not.
+// agent collects and matches it (trimmed, exact) against the option list it
+// stored when it asked: a granted budget advances the ladder, other
+// instructions do not, and an unmatched answer is a no-op.
 // shortcut: assumes the question tool's result metadata carries `answers` as
 // string[][]; if that shape changes the ladder stops shrinking (the gate still
 // blocks). Upgrade by subscribing to the question.replied event instead.
@@ -102,16 +112,20 @@ const applyAnswer = async (
   const [first] = Array.isArray(answers) ? answers : []
   const answer =
     Array.isArray(first) && typeof first[0] === 'string' ? first[0] : undefined
+  if (answer === undefined) return
 
-  if (answer === OTHER_INSTRUCTIONS) {
-    await saveState(ctx, sessionID, { spent: state.spent, remaining: 1 })
+  const option = matchRetryAnswer(state.options, answer)
+  if (option === undefined) return
+
+  if (option.attempts === null) {
+    await saveState(ctx, sessionID, { ...state, remaining: 1, options: [] })
     return
   }
-  const grant = retryOptions(state.spent).find(
-    (attempts) => answer === `Try again (${attempts})`,
-  )
-  if (grant === undefined) return
-  await saveState(ctx, sessionID, { spent: state.spent + 1, remaining: grant })
+  await saveState(ctx, sessionID, {
+    spent: state.spent + 1,
+    remaining: option.attempts,
+    options: [],
+  })
 }
 
 export default {
