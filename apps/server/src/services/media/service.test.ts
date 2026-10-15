@@ -1,50 +1,31 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
+import { mockClient } from 'aws-sdk-client-mock'
 import { migrate } from 'drizzle-orm/libsql/migrator'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest'
 
-type S3rverInstance = {
-  run: () => Promise<{ address: string; port: number }>
-  close: () => Promise<void>
-}
-
-type S3rverConstructor = new (options: {
-  address: string
-  allowMismatchedSignatures: boolean
-  configureBuckets: Array<{ name: string }>
-  directory: string
-  port: number
-  resetOnClose: boolean
-  silent: boolean
-  vhostBuckets: boolean
-}) => S3rverInstance
-
-const require = createRequire(import.meta.url)
-const S3rver = require('s3rver') as S3rverConstructor
 const tempDirectory = await mkdtemp(join(tmpdir(), 'blog-media-test-'))
-const bucketName = 'media-test'
 process.env.TURSO_CONNECTION_URL = `file:${join(tempDirectory, 'test.db')}`
 process.env.TURSO_AUTH_TOKEN = 'test-token'
 process.env.AWS_REGION = 'us-east-1'
-process.env.AWS_ACCESS_KEY_ID = 'S3RVER'
-process.env.AWS_SECRET_ACCESS_KEY = 'S3RVER'
-process.env.BUCKET_NAME = bucketName
+process.env.AWS_ACCESS_KEY_ID = 'test'
+process.env.AWS_SECRET_ACCESS_KEY = 'test'
+process.env.AWS_ENDPOINT_URL_S3 = 'http://127.0.0.1:9000'
+process.env.BUCKET_NAME = 'media-test'
 process.env.S3_FORCE_PATH_STYLE = 'true'
 process.env.MEDIA_OBJECT_ACL = 'public-read'
+process.env.MEDIA_PUBLIC_URL = 'http://127.0.0.1:9000/media-test'
 
-const s3 = new S3rver({
-  address: '127.0.0.1',
-  allowMismatchedSignatures: true,
-  configureBuckets: [{ name: bucketName }],
-  directory: join(tempDirectory, 'objects'),
-  port: 0,
-  resetOnClose: true,
-  silent: true,
-  vhostBuckets: false,
-})
+// The S3 client is mocked at the SDK level: `getSignedUrl` still signs locally
+// (no network), and HeadObject/DeleteObject responses stand in for a real store.
+const s3Mock = mockClient(S3Client)
 
 const { db } = await import('../../db')
 const { mediaAssets, posts } = await import('../../db/schema')
@@ -56,9 +37,6 @@ const migrationsFolder = fileURLToPath(
 const postId = crypto.randomUUID()
 
 beforeAll(async () => {
-  const { port } = await s3.run()
-  process.env.AWS_ENDPOINT_URL_S3 = `http://127.0.0.1:${port}`
-  process.env.MEDIA_PUBLIC_URL = `${process.env.AWS_ENDPOINT_URL_S3}/${process.env.BUCKET_NAME}`
   await migrate(db, { migrationsFolder })
   await db.insert(posts).values({
     id: postId,
@@ -68,8 +46,11 @@ beforeAll(async () => {
   })
 })
 
+beforeEach(() => {
+  s3Mock.reset()
+})
+
 afterAll(async () => {
-  await s3.close()
   await rm(tempDirectory, { recursive: true, force: true })
 })
 
@@ -86,13 +67,13 @@ test('keeps prepared uploads hidden until the object is verified', {
   })
 
   expect(prepared.asset.status).toBe('PENDING')
+  expect(prepared.uploadUrl).toContain('X-Amz-Signature')
   expect(await getMediaAssets()).toEqual([])
-  const response = await fetch(prepared.uploadUrl, {
-    method: 'PUT',
-    headers: { 'content-type': 'image/png' },
-    body: content,
+
+  s3Mock.on(HeadObjectCommand).resolves({
+    ContentLength: Buffer.byteLength(content),
+    ContentType: 'image/png',
   })
-  expect(response.ok).toBe(true)
 
   const finalized = await finalizeMediaUpload(String(prepared.asset.id))
   expect(finalized.status).toBe('READY')
@@ -109,16 +90,16 @@ test('removes an upload when object metadata does not match', {
     size: 999,
     altText: 'Invalid image',
   })
-  const response = await fetch(prepared.uploadUrl, {
-    method: 'PUT',
-    headers: { 'content-type': 'image/png' },
-    body: 'too short',
+
+  s3Mock.on(HeadObjectCommand).resolves({
+    ContentLength: 9,
+    ContentType: 'image/png',
   })
-  expect(response.ok).toBe(true)
 
   await expect(finalizeMediaUpload(String(prepared.asset.id))).rejects.toThrow(
     'Uploaded object does not match its metadata',
   )
+  expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(1)
   const remaining = await db.select().from(mediaAssets)
   expect(remaining.some((asset) => asset.id === prepared.asset.id)).toBe(false)
 })

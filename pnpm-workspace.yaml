@@ -4,18 +4,12 @@ packages:
   - 'trust-pipeline'
 auditConfig:
   ignoreGhsas:
-    - GHSA-wm7h-9275-46v2
     - GHSA-vfj7-8cjw-p6xm
-    - GHSA-hp3w-g68c-fv3c
-    - GHSA-x3cc-x39p-42qx
-    - GHSA-gh4j-gqv2-49f6
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
 minimumReleaseAgeExclude:
   - '@mdxeditor/editor@4.3.0'
-  - dicer@0.3.2
-  - fast-xml-parser@4.1.2 || 5.7.0
   - nanoid@3.3.18
   - qs@6.15.4 || 6.16.0
   - fast-uri@3.1.6 || 3.1.7 || 3.1.8

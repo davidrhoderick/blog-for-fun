@@ -17,7 +17,7 @@
     "db:check": "drizzle-kit check --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "auth:bootstrap": "tsx src/scripts/bootstrap-auth.ts",
-    "storage:dev": "s3rver -d .local/media -a 127.0.0.1 -p 9000 --no-vhost-buckets --allow-mismatched-signatures --configure-bucket blog-for-fun-media config/s3rver-cors.xml",
+    "storage:dev": "docker run --rm -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=test -e MINIO_ROOT_PASSWORD=testtest -v \"$PWD/.local/media:/data\" minio/minio server /data --console-address :9001",
     "storage:configure-cors": "tsx src/scripts/configure-media-cors.ts"
   },
   "keywords": [],
@@ -45,7 +45,7 @@
     "@vitest/coverage-v8": "^5.0.4",
     "concurrently": "^10.0.5",
     "drizzle-kit": "1.0.0-rc.4",
-    "s3rver": "^3.7.1",
+    "aws-sdk-client-mock": "^4.1.0",
     "tsx": "^4.23.9",
     "typescript": "^5.9.3",
     "vitest": "^5.0.4"

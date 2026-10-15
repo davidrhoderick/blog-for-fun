@@ -1,26 +1,33 @@
 # Accepted security advisories
 
-The trust pipeline's `audit` stage runs `pnpm audit --audit-level high` and must
-be green before it enforces. Most advisories are fixed by the version overrides
-in `pnpm-workspace.yaml`; the ones below cannot be, so they are accepted in
-`pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` (pnpm 11 no longer reads the
-`pnpm` field in `package.json`). **Accepted on 2026-10-14.**
-Review when any listed package publishes a patched release.
+The trust pipeline's `audit` stage runs `pnpm audit --audit-level high`, so only
+**high and critical** advisories block. Moderates are reported but do not fail
+the gate — they are not ignored, they are simply below the threshold.
 
-An accepted advisory is a conscious, documented risk — not a permanent pass.
-When a fix lands, remove its GHSA id from `ignoreGhsas` and drop the matching
-`minimumReleaseAgeExclude` entry.
+## Above the gate — accepted (cannot be fixed today)
+
+`pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` (pnpm 11 no longer reads the
+`pnpm` field in `package.json`). **Accepted on 2026-10-15.** Review when the
+package publishes a patched release.
 
 | GHSA | Package | Severity | Why accepted |
 |---|---|---|---|
-| GHSA-wm7h-9275-46v2 | `dicer` | high | The advisory names patched `>=0.3.2`, but **0.3.2 is not published** (npm latest is 0.3.1). Only reachable through `s3rver > busboy > dicer` — the dev-only S3 mock used in server tests, never the running server. |
-| GHSA-vfj7-8cjw-p6xm | `braces` | high | Patched `>=3.0.4` **is not published** (latest is 3.0.3). Only through dev tooling (`pm2 > chokidar`, `shadcn > fast-glob > micromatch`). |
-| GHSA-hp3w-g68c-fv3c | `sprintf-js` | moderate | Patched `>=1.1.4` **is not published** (latest is 1.1.3). Only through dev/build tooling (`babel-plugin-relay`, `drizzle-orm > @types/mssql > tedious`). |
-| GHSA-x3cc-x39p-42qx | `fast-xml-parser` | moderate | The fix requires `>=5.7.0`; `s3rver` (dev S3 mock) requires the v3 API, so any override to v4/v5 breaks it (`xmlParser.parse is not a function`). |
-| GHSA-gh4j-gqv2-49f6 | `fast-xml-parser` | moderate | Same as above — shares the `s3rver` v3 constraint. |
+| GHSA-vfj7-8cjw-p6xm | `braces` | high | The advisory names patched `>=3.0.4`, but **3.0.4 is not published** (npm latest is 3.0.3; no 4.x) — there is nothing to upgrade to. It is reached only through dev/build tooling, and only via `micromatch@4.0.8` (pulled by `@graphql-codegen/cli`, `ts-morph`, `fast-glob`, `globby`, `shadcn`, `@eddeee888/gcg-typescript-resolver-files`) and `chokidar@3` (pulled by `pm2`). Removing it would mean removing the GraphQL codegen toolchain, `shadcn`, and `pm2`'s file watcher. |
 
-## Removing them for good
+The advisory is a stack-exhaustion DoS from deeply nested patterns; here it only
+ever sees trusted globs from our own config, and it never runs in the deployed
+server. That is why it is accepted rather than blocking.
 
-All five sit in dev/build tooling, not the deployed server path. They go away by
-upgrading or replacing `s3rver`, `pm2`, and `shadcn` when their upstreams
-release fixes, at which point the matching `ignoreGhsas` entries come out.
+## Below the gate — not ignored
+
+`sprintf-js` (GHSA-hp3w-g68c-fv3c, moderate) is reported by `pnpm audit` but does
+not fail `--audit-level high`, so it needs no `ignoreGhsas` entry. Its patched
+version (`>=1.1.4`) is likewise unpublished. If the gate is ever lowered, it
+would need the same treatment as `braces`.
+
+## Already cleared
+
+Three advisories were removed by replacing the abandoned `s3rver` dev S3 mock
+with SDK-level mocking (`aws-sdk-client-mock`) in the media test: `dicer`
+(GHSA-wm7h-9275-46v2) and two `fast-xml-parser` advisories
+(GHSA-x3cc-x39p-42qx, GHSA-gh4j-gqv2-49f6).
