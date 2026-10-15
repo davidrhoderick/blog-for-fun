@@ -9,7 +9,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@types/node": "^22.20.2"
+    "@types/node": "^22.20.2",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "pm2": "^7.0.4"
