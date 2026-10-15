@@ -1,28 +1,6 @@
-import {
-  BlockTypeSelect,
-  BoldItalicUnderlineToggles,
-  CreateLink,
-  codeBlockPlugin,
-  headingsPlugin,
-  InsertCodeBlock,
-  InsertTable,
-  InsertThematicBreak,
-  imagePlugin,
-  ListsToggle,
-  linkPlugin,
-  listsPlugin,
-  MDXEditor,
-  type MDXEditorMethods,
-  markdownShortcutPlugin,
-  quotePlugin,
-  tablePlugin,
-  thematicBreakPlugin,
-  toolbarPlugin,
-  UndoRedo,
-} from '@mdxeditor/editor'
-import '@mdxeditor/editor/style.css'
-import { useEffect, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import type { MDXEditorMethods } from '@mdxeditor/editor'
+import { type RefObject, useEffect, useRef, useState } from 'react'
+import { type UseFormReturn, useForm } from 'react-hook-form'
 import {
   commitMutation,
   graphql,
@@ -35,17 +13,17 @@ import type { PostEditorPublishMutation } from '../__generated__/PostEditorPubli
 import type { PostEditorQuery } from '../__generated__/PostEditorQuery.graphql'
 import type { PostEditorSaveMutation } from '../__generated__/PostEditorSaveMutation.graphql'
 import type { PostEditorUnpublishMutation } from '../__generated__/PostEditorUnpublishMutation.graphql'
+import {
+  MarkdownField,
+  MediaLibrary,
+  type MediaUploadFormValues,
+  type PostFormValues,
+  PostMetaPanel,
+} from './post-editor-fields.client'
 import { RelayClientProvider } from './relay.client'
 
-type PostFormValues = {
-  title: string
-  slug: string
-  markdownContent: string
-}
-
-type MediaUploadFormValues = {
-  altText: string
-}
+type FinalizedMediaAsset =
+  PostEditorFinalizeMediaUploadMutation['response']['finalizeMediaUpload']
 
 const postEditorQuery = graphql`
   query PostEditorQuery($id: ID!) {
@@ -136,6 +114,145 @@ const PostEditor = ({ id }: { id: string }) => {
   )
 }
 
+const performUpload = async ({
+  environment,
+  file,
+  altText,
+  id,
+  onFinalized,
+  onError,
+}: {
+  environment: ReturnType<typeof useRelayEnvironment>
+  file: File
+  altText: string
+  id: string
+  onFinalized: (asset: FinalizedMediaAsset) => void
+  onError: (message: string) => void
+}) => {
+  commitMutation<PostEditorPrepareMediaUploadMutation>(environment, {
+    mutation: prepareMediaUploadMutation,
+    variables: {
+      input: {
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+        altText: altText.trim(),
+        attachedPostId: id,
+      },
+    },
+    onCompleted: async ({ prepareMediaUpload }) => {
+      try {
+        const response = await fetch(prepareMediaUpload.uploadUrl, {
+          method: 'PUT',
+          headers: { 'content-type': file.type },
+          body: file,
+        })
+        if (!response.ok) throw new Error('Upload failed')
+
+        commitMutation<PostEditorFinalizeMediaUploadMutation>(environment, {
+          mutation: finalizeMediaUploadMutation,
+          variables: { id: prepareMediaUpload.asset.id },
+          onCompleted: ({ finalizeMediaUpload }) =>
+            onFinalized(finalizeMediaUpload),
+          onError: () =>
+            onError(
+              'The uploaded image could not be verified. Please try again.',
+            ),
+        })
+      } catch {
+        onError('The image could not be uploaded. Please try again.')
+      }
+    },
+    onError: () => onError('The image could not be prepared for upload.'),
+  })
+}
+
+const changePublication = (
+  environment: ReturnType<typeof useRelayEnvironment>,
+  id: string,
+  publish: boolean,
+) => {
+  commitMutation<PostEditorPublishMutation | PostEditorUnpublishMutation>(
+    environment,
+    {
+      mutation: publish ? publishPostMutation : unpublishPostMutation,
+      variables: { id },
+    },
+  )
+}
+
+const useMediaUpload = ({
+  id,
+  initialMediaAssets,
+  editorRef,
+  mediaUploadForm,
+}: {
+  id: string
+  initialMediaAssets: PostEditorQuery['response']['mediaAssets']
+  editorRef: RefObject<MDXEditorMethods | null>
+  mediaUploadForm: UseFormReturn<MediaUploadFormValues>
+}) => {
+  const environment = useRelayEnvironment()
+  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const insertImage = (asset: { altText: string; url: string }) => {
+    const altText = asset.altText
+      .replaceAll(/[\r\n]+/g, ' ')
+      .replaceAll(']', '\\]')
+    editorRef.current?.focus(() => {
+      editorRef.current?.insertMarkdown(`![${altText}](${asset.url})`)
+    })
+  }
+
+  const chooseFile = (file: File | null) => {
+    setUploadFile(file)
+    if (file && !mediaUploadForm.getValues('altText')) {
+      mediaUploadForm.setValue(
+        'altText',
+        file.name.replace(/\.[^.]+$/, '').replaceAll(/[-_]/g, ' '),
+      )
+    }
+  }
+
+  const uploadImage = mediaUploadForm.handleSubmit(({ altText }) => {
+    if (!uploadFile) {
+      setUploadError('Choose an image to upload.')
+      return
+    }
+    setIsUploading(true)
+    setUploadError(null)
+    performUpload({
+      environment,
+      file: uploadFile,
+      altText,
+      id,
+      onFinalized: (asset) => {
+        setMediaAssets((assets) => [asset, ...assets])
+        insertImage(asset)
+        setUploadFile(null)
+        setIsUploading(false)
+        mediaUploadForm.reset()
+      },
+      onError: (message) => {
+        setIsUploading(false)
+        setUploadError(message)
+      },
+    })
+  })
+
+  return {
+    mediaAssets,
+    uploadError,
+    isUploading,
+    insertImage,
+    chooseFile,
+    uploadImage,
+  }
+}
+
 const PostEditorForm = ({
   id,
   mediaAssets: initialMediaAssets,
@@ -151,10 +268,12 @@ const PostEditorForm = ({
   const mediaUploadForm = useForm<MediaUploadFormValues>({
     defaultValues: { altText: '' },
   })
-  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
+  const media = useMediaUpload({
+    id,
+    initialMediaAssets,
+    editorRef,
+    mediaUploadForm,
+  })
   const published = post.publishedAt !== null
 
   useEffect(() => {
@@ -169,82 +288,6 @@ const PostEditorForm = ({
     })
   })
 
-  const changePublication = (publish: boolean) => {
-    commitMutation<PostEditorPublishMutation | PostEditorUnpublishMutation>(
-      environment,
-      {
-        mutation: publish ? publishPostMutation : unpublishPostMutation,
-        variables: { id },
-      },
-    )
-  }
-
-  const insertImage = (asset: { altText: string; url: string }) => {
-    const altText = asset.altText
-      .replaceAll(/[\r\n]+/g, ' ')
-      .replaceAll(']', '\\]')
-    editorRef.current?.focus(() => {
-      editorRef.current?.insertMarkdown(`![${altText}](${asset.url})`)
-    })
-  }
-
-  const uploadImage = mediaUploadForm.handleSubmit(({ altText }) => {
-    if (!uploadFile) {
-      setUploadError('Choose an image to upload.')
-      return
-    }
-
-    setIsUploading(true)
-    setUploadError(null)
-    commitMutation<PostEditorPrepareMediaUploadMutation>(environment, {
-      mutation: prepareMediaUploadMutation,
-      variables: {
-        input: {
-          filename: uploadFile.name,
-          contentType: uploadFile.type,
-          size: uploadFile.size,
-          altText: altText.trim(),
-          attachedPostId: id,
-        },
-      },
-      onCompleted: async ({ prepareMediaUpload }) => {
-        try {
-          const response = await fetch(prepareMediaUpload.uploadUrl, {
-            method: 'PUT',
-            headers: { 'content-type': uploadFile.type },
-            body: uploadFile,
-          })
-          if (!response.ok) throw new Error('Upload failed')
-
-          commitMutation<PostEditorFinalizeMediaUploadMutation>(environment, {
-            mutation: finalizeMediaUploadMutation,
-            variables: { id: prepareMediaUpload.asset.id },
-            onCompleted: ({ finalizeMediaUpload }) => {
-              setMediaAssets((assets) => [finalizeMediaUpload, ...assets])
-              insertImage(finalizeMediaUpload)
-              setUploadFile(null)
-              setIsUploading(false)
-              mediaUploadForm.reset()
-            },
-            onError: () => {
-              setIsUploading(false)
-              setUploadError(
-                'The uploaded image could not be verified. Please try again.',
-              )
-            },
-          })
-        } catch {
-          setIsUploading(false)
-          setUploadError('The image could not be uploaded. Please try again.')
-        }
-      },
-      onError: () => {
-        setIsUploading(false)
-        setUploadError('The image could not be prepared for upload.')
-      },
-    })
-  })
-
   return (
     <form className="post-editor" onSubmit={save}>
       <div className="post-editor-fields">
@@ -255,161 +298,35 @@ const PostEditorForm = ({
             {...form.register('title')}
           />
         </label>
-        <aside className="post-editor-panel post-editor-panel-narrow">
-          <p className="text-xs font-medium tracking-[0.12em] text-slate-500 uppercase">
-            {published ? 'Published' : 'Draft'}
-          </p>
-          <div className="post-editor-actions">
-            <button
-              className="post-editor-button post-editor-button-primary"
-              type="submit"
-            >
-              Update
-            </button>
-            <button
-              className="post-editor-button"
-              onClick={() => changePublication(!published)}
-              type="button"
-            >
-              {published ? 'Unpublish' : 'Publish'}
-            </button>
-          </div>
-        </aside>
+        <PostMetaPanel
+          onChangePublication={() =>
+            changePublication(environment, id, !published)
+          }
+          published={published}
+          variant="narrow"
+        />
         <label className="post-editor-field">
           <span className="post-editor-label">Slug</span>
           <input className="post-editor-input" {...form.register('slug')} />
         </label>
-        <section aria-labelledby="markdown-label" className="post-editor-field">
-          <span className="post-editor-label" id="markdown-label">
-            Markdown
-          </span>
-          <MDXEditor
-            className="post-editor-markdown"
-            markdown={form.watch('markdownContent')}
-            onChange={(markdown) =>
-              form.setValue('markdownContent', markdown, {
-                shouldDirty: true,
-                shouldTouch: true,
-              })
-            }
-            plugins={[
-              headingsPlugin(),
-              imagePlugin(),
-              listsPlugin(),
-              quotePlugin(),
-              thematicBreakPlugin(),
-              linkPlugin(),
-              tablePlugin(),
-              codeBlockPlugin(),
-              markdownShortcutPlugin(),
-              toolbarPlugin({
-                toolbarContents: () => (
-                  <>
-                    <UndoRedo />
-                    <BlockTypeSelect />
-                    <BoldItalicUnderlineToggles />
-                    <CreateLink />
-                    <ListsToggle />
-                    <InsertTable />
-                    <InsertCodeBlock />
-                    <InsertThematicBreak />
-                  </>
-                ),
-              }),
-            ]}
-            ref={editorRef}
-          />
-        </section>
-        <section aria-labelledby="media-label" className="post-editor-field">
-          <span className="post-editor-label" id="media-label">
-            Media library
-          </span>
-          <div className="media-library">
-            <label className="media-library-file">
-              <span className="post-editor-label">Image file</span>
-              <input
-                accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
-                disabled={isUploading}
-                onChange={(event) => {
-                  const file = event.currentTarget.files?.[0]
-                  setUploadFile(file ?? null)
-                  if (file && !mediaUploadForm.getValues('altText')) {
-                    mediaUploadForm.setValue(
-                      'altText',
-                      file.name
-                        .replace(/\.[^.]+$/, '')
-                        .replaceAll(/[-_]/g, ' '),
-                    )
-                  }
-                }}
-                type="file"
-              />
-            </label>
-            <label className="media-library-field">
-              <span className="post-editor-label">Alternative text</span>
-              <input
-                className="post-editor-input"
-                disabled={isUploading}
-                {...mediaUploadForm.register('altText', {
-                  required: 'Describe the image for readers who cannot see it.',
-                })}
-              />
-            </label>
-            {mediaUploadForm.formState.errors.altText ? (
-              <p className="media-library-error">
-                {mediaUploadForm.formState.errors.altText.message}
-              </p>
-            ) : null}
-            <button
-              className="media-library-upload"
-              disabled={isUploading}
-              onClick={uploadImage}
-              type="button"
-            >
-              {isUploading ? 'Uploading image...' : 'Upload and insert'}
-            </button>
-            {uploadError ? (
-              <p className="media-library-error">{uploadError}</p>
-            ) : null}
-            <div className="media-library-grid">
-              {mediaAssets.length === 0 ? (
-                <p className="media-library-empty">No images uploaded yet.</p>
-              ) : null}
-              {mediaAssets.map((asset) => (
-                <button
-                  className="media-library-item"
-                  key={asset.id}
-                  onClick={() => insertImage(asset)}
-                  type="button"
-                >
-                  <img alt="" src={asset.url} />
-                  <span>{asset.altText || asset.filename}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+        <MarkdownField editorRef={editorRef} form={form} />
+        <MediaLibrary
+          isUploading={media.isUploading}
+          mediaAssets={media.mediaAssets}
+          mediaUploadForm={mediaUploadForm}
+          onChooseFile={media.chooseFile}
+          onInsert={media.insertImage}
+          onUpload={media.uploadImage}
+          uploadError={media.uploadError}
+        />
       </div>
-      <aside className="post-editor-panel post-editor-panel-wide">
-        <p className="text-xs font-medium tracking-[0.12em] text-slate-500 uppercase">
-          {published ? 'Published' : 'Draft'}
-        </p>
-        <div className="post-editor-actions">
-          <button
-            className="post-editor-button post-editor-button-primary"
-            type="submit"
-          >
-            Update
-          </button>
-          <button
-            className="post-editor-button"
-            onClick={() => changePublication(!published)}
-            type="button"
-          >
-            {published ? 'Unpublish' : 'Publish'}
-          </button>
-        </div>
-      </aside>
+      <PostMetaPanel
+        onChangePublication={() =>
+          changePublication(environment, id, !published)
+        }
+        published={published}
+        variant="wide"
+      />
     </form>
   )
 }

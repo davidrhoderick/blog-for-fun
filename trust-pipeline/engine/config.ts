@@ -5,6 +5,8 @@ export const DEFAULT_IGNORE = [
   'apps/admin/app/__generated__/**',
   '.serena/**',
   '**/*.md',
+  '**/*.test.ts',
+  '**/*.test.tsx',
 ]
 
 export interface ProjectConfig {

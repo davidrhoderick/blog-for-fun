@@ -27,8 +27,9 @@ extraction mechanical instead of a refactor.
 | Duplication | ≤ 3% | `jscpd` (scans stage) |
 
 Generated code (`*.generated.ts`, `apps/admin/app/__generated__/**`), `.serena/`
-(indexer config), and documentation markdown are not code and are exempt from
-these checks.
+(indexer config), documentation markdown, and test files (`*.test.ts`,
+`*.test.tsx`) are not shipped source and are exempt from these checks. The size
+and nesting thresholds apply to source code, not tests.
 
 ## Backend layering (`apps/server`)
 

@@ -32,7 +32,7 @@
 - **Coverage floor must not be gamed by lowering a package floor** — excludes are per-file only. Pinned in Phase 2 (set) and Phase 3 (raised).
 - **Fail-fast order**: a later stage must not run when an earlier one fails. Pinned in Phase 4.
 - **Typecheck sees the whole program, not just edited files**, and is not fooled by stale generated types (codegen runs first). Pinned in Phase 4.
-- **Structure check must ignore generated files** and not miscount multi-line signatures. Pinned in Phase 5.
+- **Structure check must ignore generated and test files** and not miscount multi-line signatures. Pinned in Phase 5.
 - **tsarch must resolve workspace aliases** (`@blog/ui`) without false positives. Pinned in Phase 6.
 - **Verdict**: medium/low-confidence failures must not fail; empty diff passes. Pinned in Phase 7.
 - **Retry must terminate the turn**: after exhaustion it asks the user via the `question` tool and never silently loops. Pinned in Phase 8.
@@ -164,7 +164,7 @@ git commit -m "test: raise coverage to the per-package floor"
 - Produces:
   - `export type StageResult = { name: string; ok: boolean; output: string }`
   - `export type Stage = { name: string; run(cfg: ProjectConfig): Promise<StageResult> }`
-  - `export interface ProjectConfig { stages: { audit: boolean; lint: boolean; typecheck: boolean; structure: boolean; test: boolean; scans: boolean; review: boolean }; commands: {...}; thresholds: {...}; ignore: string[] }` — `ignore` defaults to `['*.generated.ts', 'apps/admin/app/__generated__/**', '.serena/**', '**/*.md']`
+  - `export interface ProjectConfig { stages: { audit: boolean; lint: boolean; typecheck: boolean; structure: boolean; test: boolean; scans: boolean; review: boolean }; commands: {...}; thresholds: {...}; ignore: string[] }` — `ignore` defaults to `['*.generated.ts', 'apps/admin/app/__generated__/**', '.serena/**', '**/*.md', '**/*.test.ts', '**/*.test.tsx']`
   - `export async function runPipeline(stages: Stage[], cfg: ProjectConfig): Promise<{ ok: boolean; results: StageResult[] }>` — stops at the first failure.
   - `pnpm verify` (root) → `pnpm --filter trust-pipeline run verify` → `tsx engine/run.ts`.
   - `export async function doctor(cfg: ProjectConfig): Promise<{ ok: boolean; missing: string[] }>` — verifies every tool the pipeline uses: external binaries (`osv-scanner`, `opengrep`, `cosign`) and project-callable tools (`node`, `pnpm`, `tsx`, `biome`, `vitest`, `jscpd`, `tsarch`). `runPipeline` runs it before any stage and fails fast with install hints.

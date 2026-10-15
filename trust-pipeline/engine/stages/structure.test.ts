@@ -51,10 +51,12 @@ test('passes a clean tree and skips node_modules and non-source files', {
   expect(result).toEqual({ name: 'structure', ok: true, output: '' })
 })
 
-test('ignores generated files', { tags: ['integration'] }, async () => {
+test('ignores generated and test files', { tags: ['integration'] }, async () => {
   const root = fixtureRoot()
   write(root, 'apps/server/src/schema/post.generated.ts', longFunction(200))
   write(root, 'apps/admin/app/__generated__/post.ts', longFunction(200))
+  write(root, 'apps/server/src/schema/post.test.ts', longFunction(200))
+  write(root, 'apps/admin/app/components/post.test.tsx', longFunction(200))
 
   const result = await structureStage.run({ ...config, root })
 
