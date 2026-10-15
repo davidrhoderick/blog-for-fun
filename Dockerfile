@@ -33,8 +33,9 @@ COPY --from=build /app /app
 
 # Production image: drop devDependencies (the build above needed them). The
 # runtime keeps only prod deps, plus `tsx`, which the server and the Fly release
-# command use to run TypeScript directly.
-RUN pnpm install --prod --frozen-lockfile
+# command use to run TypeScript directly. `CI=true` because pnpm purges the
+# existing modules directory here and refuses to do so without a TTY.
+RUN CI=true pnpm install --prod --frozen-lockfile
 
 EXPOSE 8080
 
