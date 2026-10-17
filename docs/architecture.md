@@ -57,11 +57,16 @@ in the pipeline's `scans` stage.
 
 ## Frontend composition (`apps/admin`, `apps/blog`)
 
-- **`apps/admin` uses Relay as its GraphQL client layer.** Components request
+- **Both apps use Relay as their GraphQL client layer.** Components request
   data with Relay queries/fragments; do not hand-roll fetch calls there.
-- **`apps/blog` is server-rendered and fetches directly** through its server
-  helper (`app/lib/relay.server.ts` → `requestPublicGraphQL`, a plain `fetch`),
-  called from route loaders. The Relay rule does not apply to it today.
+- **`apps/admin` is client-only.** Editorial data is never loaded in SSR route
+  loaders; routes render placeholders and lazy-load `*.client.tsx` components
+  behind `Suspense`.
+- **`apps/blog` preloads on the server.** Route loaders run a Relay
+  `fetchQuery`, then serialize the store (`getStore().getSource().toJSON()`)
+  into `loaderData`. The root route seeds a `RelayEnvironmentProvider` from the
+  active match's records, so route components read `store-or-network` during
+  SSR and hydration and the content stays in the server-rendered HTML.
 - **Compose components.** Extract a new component when a piece is more than
   three things; do not grow one component into a whole page.
 - **Route modules define what they export.** `loader`, `action`, `meta`,

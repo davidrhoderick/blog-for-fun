@@ -73,3 +73,27 @@ test('wires the injected fetch function into a working Relay environment', {
   expect(data).toEqual({ viewer: { id: 'viewer-1' } })
   expect(calls).toEqual([{ name: 'ViewerQuery', variables: {} }])
 })
+
+test('serves a store-or-network query from seeded records alone', {
+  tags: ['integration'],
+}, async () => {
+  const source = createRelayEnvironment(async () => ({
+    data: { viewer: { id: 'viewer-1' } },
+  }))
+  await fetchQuery(source, viewerQuery, {}).toPromise()
+
+  const hydrated = createRelayEnvironment(async () => {
+    throw new Error('the network must not be called when records are seeded')
+  }, source.getStore().getSource().toJSON())
+
+  const data = await fetchQuery(
+    hydrated,
+    viewerQuery,
+    {},
+    {
+      fetchPolicy: 'store-or-network',
+    },
+  ).toPromise()
+
+  expect(data).toEqual({ viewer: { id: 'viewer-1' } })
+})

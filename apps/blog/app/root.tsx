@@ -1,3 +1,4 @@
+import type { InitialRecords } from '@blog/graphql-runtime'
 import {
   isRouteErrorResponse,
   Links,
@@ -5,8 +6,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useMatches,
 } from 'react-router'
 
+import { RelayScope } from '~/components/relay-scope'
 import type { Route } from './+types/root'
 import './app.css'
 
@@ -31,7 +34,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />
+  const match = useMatches().at(-1)
+  const records = (
+    match?.loaderData as { records?: InitialRecords } | undefined
+  )?.records
+
+  return (
+    <RelayScope records={records}>
+      <Outlet />
+    </RelayScope>
+  )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

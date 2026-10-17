@@ -3,6 +3,7 @@
 export const DEFAULT_IGNORE = [
   '*.generated.ts',
   'apps/admin/app/__generated__/**',
+  'apps/blog/app/__generated__/**',
   '.serena/**',
   '**/*.md',
   '**/*.test.ts',
