@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest'
 import {
+  checkIgnoreReasons,
   checkSource,
+  checkTestTags,
   MAX_FILE_LINES,
   MAX_FUNCTION_LINES,
   MAX_NESTING,
@@ -109,4 +111,57 @@ test('ignores generated files', { tags: ['unit'] }, () => {
       source,
     }),
   ).toEqual([])
+})
+
+test('flags a test carrying no unit/integration tag', {
+  tags: ['unit'],
+}, () => {
+  const source = ["test('does a thing', () => {})", ''].join('\n')
+
+  const violations = checkTestTags({ filePath: 'a.test.ts', source })
+
+  expect(violations).toHaveLength(1)
+  expect(violations[0]?.rule).toBe('untagged-test')
+  expect(violations[0]?.line).toBe(1)
+})
+
+test('accepts tagged test and it calls', { tags: ['unit'] }, () => {
+  const source = [
+    "test('a', { tags: ['unit'] }, () => {})",
+    "it('b', { tags: ['integration'] }, () => {})",
+    '',
+  ].join('\n')
+
+  expect(checkTestTags({ filePath: 'a.test.ts', source })).toEqual([])
+})
+
+test('does not mistake a same-named method for a test', {
+  tags: ['unit'],
+}, () => {
+  const source = ['const ok = /x/.test(value)', 'regex.test(name)', ''].join(
+    '\n',
+  )
+
+  expect(checkTestTags({ filePath: 'a.test.ts', source })).toEqual([])
+})
+
+test('flags a coverage ignore with no reason', { tags: ['unit'] }, () => {
+  const source = ['/* v8 ignore next */', 'const x = 1', ''].join('\n')
+
+  const violations = checkIgnoreReasons({ filePath: 'a.ts', source })
+
+  expect(violations).toHaveLength(1)
+  expect(violations[0]?.rule).toBe('unexplained-ignore')
+})
+
+test('accepts a coverage ignore that states a reason', {
+  tags: ['unit'],
+}, () => {
+  const source = [
+    '/* v8 ignore next -- network boundary */',
+    'const x = 1',
+    '',
+  ].join('\n')
+
+  expect(checkIgnoreReasons({ filePath: 'a.ts', source })).toEqual([])
 })

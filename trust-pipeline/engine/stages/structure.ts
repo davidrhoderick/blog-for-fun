@@ -1,9 +1,16 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { checkSource, isIgnored, type Violation } from '../checks/ast'
+import {
+  checkIgnoreReasons,
+  checkSource,
+  checkTestTags,
+  isIgnored,
+  type Violation,
+} from '../checks/ast'
 import type { Stage } from './types'
 
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/
+const TEST_FILE = /\.test\.(?:[cm]?[jt]sx?)$/
 // Build artifacts and dependencies are never source.
 const SKIP_DIRS = new Set(['node_modules', '.git', 'coverage', 'build', 'dist'])
 
@@ -24,10 +31,18 @@ export const structureStage: Stage = {
     const violations: Violation[] = []
     for (const file of walk(cfg.root)) {
       const rel = path.relative(cfg.root, file).split(path.sep).join('/')
-      if (!SOURCE_FILE.test(rel) || isIgnored(rel, cfg.ignore)) continue
-      violations.push(
-        ...checkSource({ filePath: rel, source: readFileSync(file, 'utf8') }),
-      )
+      if (!SOURCE_FILE.test(rel)) continue
+      const source = readFileSync(file, 'utf8')
+      if (isIgnored(rel, cfg.ignore)) {
+        // Ignored files are exempt from the size rules, but test files still
+        // have to carry a tag, which is where their timeout comes from.
+        if (TEST_FILE.test(rel)) {
+          violations.push(...checkTestTags({ filePath: rel, source }))
+        }
+        continue
+      }
+      violations.push(...checkSource({ filePath: rel, source }))
+      violations.push(...checkIgnoreReasons({ filePath: rel, source }))
     }
     return {
       name: 'structure',

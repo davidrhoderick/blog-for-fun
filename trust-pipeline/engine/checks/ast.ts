@@ -10,7 +10,12 @@ export const MAX_NESTING = 4
 export const IGNORE_GLOBS = DEFAULT_IGNORE
 
 export type Violation = {
-  rule: 'file-length' | 'function-length' | 'nesting'
+  rule:
+    | 'file-length'
+    | 'function-length'
+    | 'nesting'
+    | 'untagged-test'
+    | 'unexplained-ignore'
   file: string
   line: number
   message: string
@@ -213,4 +218,87 @@ export function symbolsIn(source: string, filePath: string): RawSymbol[] {
   const out: RawSymbol[] = []
   visit(sourceFile, sourceFile, out)
   return out
+}
+
+const TEST_CALLEES = new Set(['test', 'it'])
+// `test.each` and `test.todo` take a table or a name, not a test body, so they
+// are not checked; the modifier forms that do take a body are.
+const NON_BODY_MODIFIERS = new Set(['each', 'todo'])
+// Coverage ignore comments, which must carry a reason after `--`.
+const IGNORE_COMMENT = /\*\s*(?:v8|c8|istanbul)\s+ignore\b[\s\S]*?\*\//g
+
+/**
+ * Test calls carrying no `unit`/`integration` tag, so the tag that sets the
+ * integration timeout can never be forgotten. Pure; no I/O.
+ */
+export function checkTestTags(input: {
+  filePath: string
+  source: string
+}): Violation[] {
+  const { filePath, source } = input
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    /\.(tsx|jsx)$/.test(filePath) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
+  const violations: Violation[] = []
+  const walk = (node: ts.Node): void => {
+    // shortcut: `test.each(...)` returns a callable, so its inner call is not
+    // matched; add it when a suite adopts that form.
+    if (ts.isCallExpression(node) && isTestCall(node)) {
+      const tagged = node.arguments.some(
+        (argument) =>
+          ts.isObjectLiteralExpression(argument) &&
+          argument.properties.some(
+            (property) => property.name?.getText() === 'tags',
+          ),
+      )
+      if (!tagged) {
+        violations.push({
+          rule: 'untagged-test',
+          file: filePath,
+          line: lineOf(sourceFile, node.getStart(sourceFile)),
+          message: 'test carries no unit/integration tag',
+        })
+      }
+    }
+    node.forEachChild(walk)
+  }
+  walk(sourceFile)
+  return violations
+}
+
+/** Coverage ignore comments with no reason after `--`. Pure; no I/O. */
+export function checkIgnoreReasons(input: {
+  filePath: string
+  source: string
+}): Violation[] {
+  const violations: Violation[] = []
+  for (const [comment] of input.source.matchAll(IGNORE_COMMENT)) {
+    if (comment.includes('--')) continue
+    violations.push({
+      rule: 'unexplained-ignore',
+      file: input.filePath,
+      line: input.source.slice(0, input.source.indexOf(comment)).split('\n')
+        .length,
+      message:
+        'coverage ignore needs a reason, as `/* v8 ignore next -- why */`',
+    })
+  }
+  return violations
+}
+
+function isTestCall(node: ts.CallExpression): boolean {
+  const callee = node.expression
+  if (ts.isIdentifier(callee)) return TEST_CALLEES.has(callee.text)
+  // A modifier form such as `test.skip(...)`, but never a same-named method on
+  // another object (`regex.test(...)`).
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    ts.isIdentifier(callee.expression) &&
+    TEST_CALLEES.has(callee.expression.text) &&
+    !NON_BODY_MODIFIERS.has(callee.name.text)
+  )
 }

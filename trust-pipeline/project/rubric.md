@@ -35,20 +35,20 @@ fail: The symbol adds an abstraction, wrapper, or helper chain with a single cal
 ## structure-naming
 
 question: Does this symbol's name say what it does, so a reader can use it without reading its body — even when that makes the name long?
-pass: The name describes the symbol's behavior or responsibility. Length is never a reason to fail; a longer, more descriptive name is preferred over a short vague one.
+pass: The name describes the symbol's behavior or responsibility. Length is never a reason to fail; a longer, more descriptive name is preferred over a short vague one. A name fixed by an interface, framework, or external contract is not this symbol's to choose.
 fail: The name is vague or misleading, or abbreviated in a way a reader must decode.
 
 ## frontend-composition
 
-question: If this symbol is frontend code, does it follow the composition rules: components extracted when a piece is more than three things, hooks reused, no JSX produced inside useMemo or useCallback, and server state kept separate from local or context state?
+question: If this symbol is frontend code, does it follow the composition rules: components extracted when a piece is more than three things, hooks reused, no JSX produced inside useMemo or useCallback, server state kept separate from local or context state, and GraphQL data fetched through the app's established client layer rather than a hand-rolled request?
 pass: The symbol is not frontend code, or it follows the composition rules.
-fail: The symbol is frontend code that breaks a composition rule, such as growing one component into a whole page or producing JSX inside a memo hook.
+fail: The symbol is frontend code that breaks a composition rule, such as growing one component into a whole page, producing JSX inside a memo hook, or hand-rolling a GraphQL request that belongs in the app's client layer.
 
 ## methodology-happy-path-unit
 
 question: Does this change add a happy-path unit test that should instead be an integration test?
-pass: No new happy-path unit test; unit tests added here pin an edge case only, or the symbol is not a test.
-fail: A happy-path unit test was added where the behavior could be exercised through a system as an integration test.
+pass: No new happy-path unit test; unit tests added here pin an edge case only, the subject is a pure utility with no system to promote into, or the symbol is not a test.
+fail: A happy-path unit test was added for a subject that has a system to exercise it through, so it belongs as an integration test.
 
 ## methodology-diff-test
 
