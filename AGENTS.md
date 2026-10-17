@@ -62,7 +62,9 @@ needs running:
 - `server` — `graphql-codegen`, then its watcher and `tsx watch`.
 - `admin` — Relay compile and `react-router typegen`, then Vite. The Relay step
   runs `graphql:generate` (source → schema); it never contacts the server.
-- `blog` — `react-router typegen`, then Vite.
+- `blog` — Relay compile and `react-router typegen`, then Vite. Like admin, the
+  Relay step runs `graphql:generate` (source → schema); it never contacts the
+  server.
 
 The server's `dev` watches **only the GraphQL schema** — not the admin's Relay
 artifacts or the apps' React Router types. So the pipeline always runs the full
@@ -73,10 +75,10 @@ Codegen on demand:
 - Everything: `pnpm codegen` (GraphQL schema → admin → blog)
 - GraphQL schema: `pnpm --filter server run dev:codegen`
 - Admin: Relay artifacts + `react-router typegen`
-- Blog: `react-router typegen`
+- Blog: Relay artifacts + `react-router typegen`
 
-The GraphQL client layer for the admin app is **Relay**. `blog` is
-server-rendered and fetches directly through its server helper.
+The GraphQL client layer for both apps is **Relay**. `admin` is client-only;
+`blog` prefetches in server route loaders and hydrates from serialized records.
 
 ### Bringing the stack up from a fresh clone
 

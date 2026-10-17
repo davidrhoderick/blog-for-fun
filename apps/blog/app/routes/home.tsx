@@ -1,41 +1,27 @@
-import { Link } from 'react-router'
-import { PostDate } from '~/components/post-date'
+import { graphql, useLazyLoadQuery } from 'react-relay'
+import { fetchQuery } from 'relay-runtime'
+import type { PublicPostIndexQuery } from '~/__generated__/PublicPostIndexQuery.graphql'
+import { PostCard } from '~/components/post-card'
 import { Reveal } from '~/components/reveal'
 import { SiteHeader } from '~/components/site-header'
-import { requestPublicGraphQL } from '../lib/relay.server'
+import { createPublicRelayEnvironment } from '~/lib/relay'
+import { resolveGraphQLUrl } from '~/lib/relay.server'
 import type { Route } from './+types/home'
 
-type PostIndexData = {
-  posts: {
-    id: string
-    slug: string
-    title: string
-    markdownContent: string
-    publishedAt: string
-  }[]
-}
-
-const postIndexQuery = `
+const postIndexQuery = graphql`
   query PublicPostIndexQuery {
     posts {
       id
-      slug
-      title
-      markdownContent
-      publishedAt
+      ...PostCard_post
     }
   }
 `
 
-const excerpt = (markdown: string) =>
-  markdown
-    .replaceAll(/[^\w\s-]/g, '')
-    .replaceAll(/\s+/g, ' ')
-    .slice(0, 150)
-
 export const loader = async () => {
-  const result = await requestPublicGraphQL<PostIndexData>(postIndexQuery)
-  return result ?? { posts: [] }
+  const environment = createPublicRelayEnvironment({ url: resolveGraphQLUrl() })
+  await fetchQuery(environment, postIndexQuery, {}).toPromise()
+
+  return { records: environment.getStore().getSource().toJSON() }
 }
 
 export const headers: Route.HeadersFunction = () => ({
@@ -50,7 +36,13 @@ export const meta: Route.MetaFunction = () => [
   },
 ]
 
-export default function Home({ loaderData }: Route.ComponentProps) {
+export default function Home() {
+  const data = useLazyLoadQuery<PublicPostIndexQuery>(
+    postIndexQuery,
+    {},
+    { fetchPolicy: 'store-or-network' },
+  )
+
   return (
     <main className="site-shell">
       <SiteHeader />
@@ -64,29 +56,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </h1>
         </Reveal>
       </section>
-
       <section
         aria-labelledby="dispatches-heading"
         className="post-list-section"
       >
         <div className="section-heading">
           <h2 id="dispatches-heading">Latest dispatches</h2>
-          <span>{loaderData.posts.length} entries</span>
+          <span>{data.posts.length} entries</span>
         </div>
         <div className="post-list">
-          {loaderData.posts.map((post, index) => (
-            <Reveal delay={0.08 * index} key={post.id}>
-              <article className="post-card">
-                <PostDate value={post.publishedAt} />
-                <Link prefetch="intent" to={`/posts/${post.slug}`}>
-                  <h3>{post.title}</h3>
-                  <p>{excerpt(post.markdownContent)}...</p>
-                  <span className="post-card-link">
-                    Read note <b>↗</b>
-                  </span>
-                </Link>
-              </article>
-            </Reveal>
+          {data.posts.map((post, index) => (
+            <PostCard delay={0.08 * index} key={post.id} post={post} />
           ))}
         </div>
       </section>
