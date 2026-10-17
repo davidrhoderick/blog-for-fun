@@ -4,6 +4,7 @@ import { db } from '../db'
 import {
   authAuditEvents,
   authPasswordCredentials,
+  authSessions,
   authUserRoles,
   authUsers,
   users,
@@ -59,6 +60,48 @@ export const authenticatePassword = async (email: string, password: string) => {
   clearLoginAttempts(normalizedEmail)
   const session = await createSession(credential.authUserId)
   return { authUserId: credential.authUserId, ...session }
+}
+
+export const recoverAdministratorPassword = async (
+  email: string,
+  newPassword: string,
+) => {
+  const normalizedEmail = normalizeEmail(email)
+  const [credential] = await db
+    .select({
+      authUserId: authUsers.id,
+      status: authUsers.status,
+    })
+    .from(authPasswordCredentials)
+    .innerJoin(authUsers, eq(authPasswordCredentials.authUserId, authUsers.id))
+    .where(eq(authPasswordCredentials.email, normalizedEmail))
+    .limit(1)
+
+  if (!credential) {
+    throw new Error('No account exists with that email address')
+  }
+  if (credential.status !== 'active') {
+    throw new Error('That account is disabled; enable it before recovering it')
+  }
+
+  const passwordHash = await hashPassword(newPassword)
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(authPasswordCredentials)
+      .set({ passwordHash, passwordChangedAt: new Date() })
+      .where(eq(authPasswordCredentials.authUserId, credential.authUserId))
+    await tx
+      .delete(authSessions)
+      .where(eq(authSessions.authUserId, credential.authUserId))
+    await tx.insert(authAuditEvents).values({
+      subjectAuthUserId: credential.authUserId,
+      eventType: 'administrator.password.recovered',
+      metadata: {},
+    })
+  })
+
+  return credential.authUserId
 }
 
 type BootstrapAdministratorInput = {

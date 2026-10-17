@@ -36,8 +36,8 @@ media changes by hand.
   source control or logs.
 - Generic failed-login error handling is committed (introduced in `ad9b379`).
   Operational steps stay in this document rather than a separate runbook, so
-  there is one source of truth. A tested administrator password-recovery command
-  is still outstanding.
+  there is one source of truth. Administrator password recovery runs through
+  `pnpm --filter server auth:recover`.
 - The initial media upload foundation is committed as `f522058`; the safer
   prepare/finalize lifecycle and attachment-context work is committed as
   `221926e`.
@@ -234,10 +234,13 @@ work remains, ordered by priority.
   The command deliberately refuses to run when any authentication user already
   exists. Do not pass `BOOTSTRAP_PASSWORD` on a command line, where it could be
   retained in shell history or process inspection.
-- Add a tested administrator password-recovery command before exposing any
-  password-reset link. It should be invoked through a controlled Fly console,
-  validate the replacement password, update `password_changed_at`, revoke all
-  sessions, and write an audit event. A public email reset flow needs dedicated
+- Recover a lost administrator password with `pnpm --filter server auth:recover`.
+  It prints the target database, asks for confirmation, prompts for the email
+  and the new password twice, validates the password, updates
+  `password_changed_at`, revokes every session for the account, and writes an
+  `administrator.password.recovered` audit event. It reads no password from the
+  environment and never writes `.env`. Run it through a controlled Fly console
+  in production. A public email reset flow remains deferred; it needs dedicated
   token storage, expiry, rate limits, delivery, and anti-enumeration controls.
 - Make GraphQL authorization fail closed for mutations through middleware, a
   schema directive, or an explicit mutation policy registry. Require every
