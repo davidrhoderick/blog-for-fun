@@ -18,6 +18,7 @@ export default defineConfig({
         'src/db/migrate.ts',
         'src/scripts/bootstrap-auth.ts',
         'src/scripts/configure-media-cors.ts',
+        'src/scripts/recover-password.ts',
       ],
       thresholds: { lines: 80, branches: 80 },
     },
