@@ -20,6 +20,7 @@ extraction mechanical instead of a refactor.
 | Line width | 80 | Biome formatter (`formatter.lineWidth`) |
 | Function length | ≤ 80 LOC | structure AST check |
 | File length | ≤ 400 LOC | structure AST check |
+| Route module length | ≤ 150 LOC | structure AST check (a route holds a loader, action, meta, and page) |
 | Nesting depth | ≤ 4 | structure AST check |
 | Cognitive complexity | ≤ 20 | Biome `noExcessiveCognitiveComplexity` |
 | Nested callbacks | none excessive | Biome `noExcessiveNestedCallbacks` |
@@ -43,7 +44,13 @@ resolver → service → db
   and **must not touch the database** directly.
 - **Services** (`src/services/<domain>/`) own all database access and business
   rules, and are the only layer in the schema path that imports `db/`.
-- **`db/`** holds the Drizzle schema and client; it knows nothing above it.
+- **`auth/`** is a peer subsystem and may use `db/` directly. It is not in the
+  schema path, and wrapping it in a service would only add indirection.
+- **Mappers** (`services/**/to*.ts`) may import `db/schema` for row types but
+  never the `db` client: they map, and nothing else. A mapper that queries is a
+  service in disguise.
+- **`db/`** holds the Drizzle schema and client and imports no layer above it.
+  `lib/env` is a permitted leaf — it imports nothing from the app.
 
 This is architecture pattern #1 in the architecture suite (`tsarch`), which runs
 in the pipeline's `scans` stage.
@@ -57,6 +64,12 @@ in the pipeline's `scans` stage.
   called from route loaders. The Relay rule does not apply to it today.
 - **Compose components.** Extract a new component when a piece is more than
   three things; do not grow one component into a whole page.
+- **Route modules define what they export.** `loader`, `action`, `meta`,
+  `handle`, and the default component are defined in the route file, never
+  re-exported or aliased from another module, so opening one file shows what
+  the page does. Local helpers that name a step the route performs are welcome.
+- **Lazy client work gets a boundary.** A module that lazily imports a
+  `*.client` component renders it inside `Suspense`.
 - **No JSX produced inside `useMemo`/`useCallback`** — those return values, not
   markup. Checked by the GritQL plugin above.
 - **Reuse hooks**; a behavior that belongs in a hook lives in a hook.

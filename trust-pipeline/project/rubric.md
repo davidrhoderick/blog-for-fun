@@ -29,7 +29,7 @@ fail: The symbol mixes responsibilities, or carries unrelated work that belongs 
 ## structure-abstraction
 
 question: Is any abstraction this symbol adds justified by more than one caller, without single-use indirection or a chain of micro-helpers?
-pass: Abstractions have multiple callers, or the symbol adds no abstraction.
+pass: Abstractions have multiple callers, the symbol adds no abstraction, or it is a single local helper inside a route module that names a step the route performs.
 fail: The symbol adds an abstraction, wrapper, or helper chain with a single caller, or splits one behavior into several trivial helpers.
 
 ## structure-naming
@@ -37,6 +37,12 @@ fail: The symbol adds an abstraction, wrapper, or helper chain with a single cal
 question: Does this symbol's name say what it does, so a reader can use it without reading its body — even when that makes the name long?
 pass: The name describes the symbol's behavior or responsibility. Length is never a reason to fail; a longer, more descriptive name is preferred over a short vague one. A name fixed by an interface, framework, or external contract is not this symbol's to choose.
 fail: The name is vague or misleading, or abbreviated in a way a reader must decode.
+
+## structure-mapper
+
+question: If this symbol is a mapper (a `to*` function, or one in a file named for mapping), does it only map its input to its output?
+pass: The symbol is not a mapper, or it only maps, with no database access, fetching, or unrelated work.
+fail: The symbol is a mapper that reads the database, fetches, or does more than map.
 
 ## frontend-composition
 

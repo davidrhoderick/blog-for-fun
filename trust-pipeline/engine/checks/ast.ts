@@ -16,6 +16,8 @@ export type Violation = {
     | 'nesting'
     | 'untagged-test'
     | 'unexplained-ignore'
+    | 'route-reexport'
+    | 'missing-suspense'
   file: string
   line: number
   message: string
@@ -107,18 +109,21 @@ function collectFunctions(
 export function checkSource(input: {
   filePath: string
   source: string
+  /** Overrides MAX_FILE_LINES for files that legitimately hold more. */
+  maxFileLines?: number
 }): Violation[] {
   const { filePath, source } = input
   if (isIgnored(filePath)) return []
 
+  const maxFileLines = input.maxFileLines ?? MAX_FILE_LINES
   const violations: Violation[] = []
   const lines = source.replace(/\n$/, '').split('\n').length
-  if (lines > MAX_FILE_LINES) {
+  if (lines > maxFileLines) {
     violations.push({
       rule: 'file-length',
       file: filePath,
       line: 1,
-      message: `file is ${lines} lines (max ${MAX_FILE_LINES})`,
+      message: `file is ${lines} lines (max ${maxFileLines})`,
     })
   }
 
@@ -301,4 +306,56 @@ function isTestCall(node: ts.CallExpression): boolean {
     TEST_CALLEES.has(callee.expression.text) &&
     !NON_BODY_MODIFIERS.has(callee.name.text)
   )
+}
+
+/**
+ * A file that lazily imports a `*.client` module must render it behind a
+ * Suspense boundary. Pure; no I/O.
+ */
+export function checkClientSuspense(input: {
+  filePath: string
+  source: string
+}): Violation[] {
+  const sourceFile = ts.createSourceFile(
+    input.filePath,
+    input.source,
+    ts.ScriptTarget.Latest,
+    true,
+    /\.(tsx|jsx)$/.test(input.filePath) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
+  let lazyClient = false
+  let boundary = false
+  const walk = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
+      const [specifier] = node.arguments
+      if (
+        specifier !== undefined &&
+        ts.isStringLiteral(specifier) &&
+        specifier.text.includes('.client')
+      ) {
+        lazyClient = true
+      }
+    }
+    if (
+      ts.isJsxOpeningElement(node) &&
+      node.tagName.getText(sourceFile).endsWith('Suspense')
+    ) {
+      boundary = true
+    }
+    node.forEachChild(walk)
+  }
+  walk(sourceFile)
+  if (!lazyClient || boundary) return []
+  return [
+    {
+      rule: 'missing-suspense',
+      file: input.filePath,
+      line: 1,
+      message:
+        'a lazily imported *.client module needs a Suspense boundary here',
+    },
+  ]
 }

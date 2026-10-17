@@ -1,12 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
+  checkClientSuspense,
   checkIgnoreReasons,
   checkSource,
   checkTestTags,
   isIgnored,
   type Violation,
 } from '../checks/ast'
+import { checkRouteExports } from '../checks/routes'
 import type { Stage } from './types'
 
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/
@@ -41,8 +43,21 @@ export const structureStage: Stage = {
         }
         continue
       }
-      violations.push(...checkSource({ filePath: rel, source }))
+      const routeModule = path.matchesGlob(rel, cfg.routeFiles)
+      violations.push(
+        ...checkSource({
+          filePath: rel,
+          source,
+          maxFileLines: routeModule
+            ? cfg.thresholds.maxRouteFileLines
+            : cfg.thresholds.maxFileLines,
+        }),
+      )
       violations.push(...checkIgnoreReasons({ filePath: rel, source }))
+      violations.push(...checkClientSuspense({ filePath: rel, source }))
+      if (routeModule) {
+        violations.push(...checkRouteExports({ filePath: rel, source }))
+      }
     }
     return {
       name: 'structure',

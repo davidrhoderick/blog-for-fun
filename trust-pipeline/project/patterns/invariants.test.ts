@@ -102,3 +102,68 @@ test('app code stays free of pipeline infrastructure', {
 
   expect(offenders).toEqual([])
 })
+
+const SERVER_SRC = path.join(REPO_ROOT, 'apps/server/src')
+const DB_DIR = path.join(SERVER_SRC, 'db')
+const DB_SCHEMA = path.join(DB_DIR, 'schema')
+/** Mappers: `to*` modules under services, which may only map. */
+const MAPPER = /^apps\/server\/src\/services\/.*\/to[^/]+\.ts$/
+
+const repoPath = (file: string) =>
+  path.relative(REPO_ROOT, file).split(path.sep).join('/')
+
+/** One file's relative imports, resolved, so a target can be classified. */
+function relativeImports(file: string): string[] {
+  const { importedFiles } = ts.preProcessFile(
+    readFileSync(file, 'utf8'),
+    true,
+    true,
+  )
+  return importedFiles
+    .filter(({ fileName }) => fileName.startsWith('.'))
+    .map(({ fileName }) => path.resolve(path.dirname(file), fileName))
+}
+
+test('mappers read types from db/schema but never the db client', {
+  tags: ['integration'],
+}, () => {
+  const offenders: string[] = []
+  for (const file of walkSources(path.join(SERVER_SRC, 'services'))) {
+    if (!MAPPER.test(repoPath(file))) continue
+    for (const target of relativeImports(file)) {
+      const typesOnly =
+        target === DB_SCHEMA || target.startsWith(`${DB_SCHEMA}${path.sep}`)
+      if (target.startsWith(DB_DIR) && !typesOnly) {
+        offenders.push(`${repoPath(file)} → ${repoPath(target)}`)
+      }
+    }
+  }
+
+  expect(offenders).toEqual([])
+})
+
+test('the db layer imports nothing above it', { tags: ['integration'] }, () => {
+  const layers = ['services', 'auth', 'schema'].map((dir) =>
+    path.join(SERVER_SRC, dir),
+  )
+  const entry = path.join(SERVER_SRC, 'server.ts')
+  const offenders: string[] = []
+  for (const file of walkSources(DB_DIR)) {
+    for (const target of relativeImports(file)) {
+      const above =
+        target === entry ||
+        layers.some(
+          (dir) => target === dir || target.startsWith(`${dir}${path.sep}`),
+        )
+      if (above) offenders.push(`${repoPath(file)} → ${repoPath(target)}`)
+    }
+  }
+
+  expect(offenders).toEqual([])
+})
+
+test('the env module imports nothing from the app', {
+  tags: ['integration'],
+}, () => {
+  expect(relativeImports(path.join(SERVER_SRC, 'lib/env.ts'))).toEqual([])
+})

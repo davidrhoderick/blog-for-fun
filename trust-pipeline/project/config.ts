@@ -29,12 +29,14 @@ export const config: ProjectConfig = {
   },
   thresholds: {
     maxFileLines: 400,
+    maxRouteFileLines: 150,
     maxFunctionLines: 80,
     maxNesting: 4,
     maxCognitiveComplexity: 20,
     duplication: 3,
     coverage: 80,
   },
+  routeFiles: 'apps/*/app/routes/*',
   ignore: DEFAULT_IGNORE,
   root,
 }

@@ -30,12 +30,16 @@ export interface ProjectConfig {
   }
   thresholds: {
     maxFileLines: number
+    /** Route modules hold a loader, action, meta, and page, so they get more. */
+    maxRouteFileLines: number
     maxFunctionLines: number
     maxNesting: number
     maxCognitiveComplexity: number
     duplication: number
     coverage: number
   }
+  /** Glob for route modules, which are held to the route-specific rules. */
+  routeFiles: string
   ignore: string[]
   /** Repo root the stage commands run from. */
   root: string

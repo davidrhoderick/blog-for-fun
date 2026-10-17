@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import {
+  checkClientSuspense,
   checkIgnoreReasons,
   checkSource,
   checkTestTags,
@@ -164,4 +165,53 @@ test('accepts a coverage ignore that states a reason', {
   ].join('\n')
 
   expect(checkIgnoreReasons({ filePath: 'a.ts', source })).toEqual([])
+})
+
+test('flags a lazy client import with no Suspense boundary', {
+  tags: ['unit'],
+}, () => {
+  const source = [
+    "import { lazy } from 'react'",
+    "const Routed = lazy(() => import('~/components/x.client'))",
+    'export default () => <Routed />',
+    '',
+  ].join('\n')
+
+  const violations = checkClientSuspense({
+    filePath: 'app/routes/x.tsx',
+    source,
+  })
+
+  expect(violations).toHaveLength(1)
+  expect(violations[0]?.rule).toBe('missing-suspense')
+})
+
+test('accepts a lazy client import rendered inside Suspense', {
+  tags: ['unit'],
+}, () => {
+  const source = [
+    "import { lazy, Suspense } from 'react'",
+    "const Routed = lazy(() => import('~/components/x.client'))",
+    'export default () => <Suspense fallback={null}><Routed /></Suspense>',
+    '',
+  ].join('\n')
+
+  expect(checkClientSuspense({ filePath: 'app/routes/x.tsx', source })).toEqual(
+    [],
+  )
+})
+
+test('ignores a lazy import that is not client-only', {
+  tags: ['unit'],
+}, () => {
+  const source = [
+    "import { lazy } from 'react'",
+    "const Routed = lazy(() => import('~/components/x.server'))",
+    'export default () => <Routed />',
+    '',
+  ].join('\n')
+
+  expect(checkClientSuspense({ filePath: 'app/routes/x.tsx', source })).toEqual(
+    [],
+  )
 })
