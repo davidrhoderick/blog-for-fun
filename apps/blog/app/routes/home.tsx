@@ -25,7 +25,8 @@ export const loader = async () => {
 }
 
 export const headers: Route.HeadersFunction = () => ({
-  'cache-control': 'public, max-age=60, s-maxage=300',
+  'cache-control':
+    'public, max-age=60, s-maxage=300, stale-while-revalidate=86400',
 })
 
 export const meta: Route.MetaFunction = () => [
