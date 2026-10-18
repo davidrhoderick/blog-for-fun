@@ -1,3 +1,4 @@
+import type { InitialRecords } from '@blog/graphql-runtime'
 import {
   isRouteErrorResponse,
   Links,
@@ -5,8 +6,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useMatches,
 } from 'react-router'
 
+import { RelayScope } from '~/components/relay-scope'
 import type { Route } from './+types/root'
 import './app.css'
 
@@ -31,7 +34,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />
+  // Every loader returns the page's Relay data as `records`.
+  const matches = useMatches()
+  // Matches run from the outermost layout to the page on screen, so the last
+  // one is the page we are rendering now.
+  const currentPage = matches.at(-1)
+  // Open that page's loader result and take the saved Relay data out of it.
+  const pageData = currentPage?.loaderData as
+    | { records?: InitialRecords }
+    | undefined
+  const records = pageData?.records
+
+  return (
+    <RelayScope records={records}>
+      <Outlet />
+    </RelayScope>
+  )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

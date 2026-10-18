@@ -388,3 +388,69 @@ test('rejects malformed slugs before reaching the database', {
   )
   expect(nonString.errors?.[0]?.message).toMatch(/Slug must be a string/)
 })
+
+test('serves only published posts through the public contract', {
+  tags: ['integration'],
+}, async () => {
+  const draft = await putPost({
+    slug: 'public-contract-draft',
+    title: 'Hidden draft',
+    markdownContent: 'Not visible',
+  })
+  const scheduled = await putPost({
+    slug: 'public-contract-scheduled',
+    title: 'Scheduled',
+    markdownContent: 'Later',
+  })
+  const visible = await putPost({
+    slug: 'public-contract-visible',
+    title: 'Visible',
+    markdownContent: 'Visible',
+  })
+
+  await graphql(
+    `mutation Schedule($id: ID!, $publishedAt: DateTimeISO!) {
+      publishPost(id: $id, publishedAt: $publishedAt) { id }
+    }`,
+    {
+      id: scheduled.id,
+      publishedAt: new Date(Date.now() + 60 * 60 * 1_000).toISOString(),
+    },
+    cookie,
+  )
+  await graphql(
+    `mutation Publish($id: ID!) { publishPost(id: $id) { id } }`,
+    { id: visible.id },
+    cookie,
+  )
+
+  const list = await responseJson(
+    await graphql('query { publishedPosts { id slug publishedAt } }'),
+  )
+  const published = list.data?.publishedPosts as Array<{
+    id: string
+    slug: string
+    publishedAt: string
+  }>
+  expect(published.some((post) => post.id === visible.id)).toBe(true)
+  expect(published.some((post) => post.id === draft.id)).toBe(false)
+  expect(published.some((post) => post.id === scheduled.id)).toBe(false)
+  expect(published.every((post) => typeof post.publishedAt === 'string')).toBe(
+    true,
+  )
+
+  const bySlug = await responseJson(
+    await graphql(
+      `query {
+        visible: publishedPostBySlug(slug: "public-contract-visible") { id publishedAt }
+        draft: publishedPostBySlug(slug: "public-contract-draft") { id }
+        scheduled: publishedPostBySlug(slug: "public-contract-scheduled") { id }
+      }`,
+    ),
+  )
+  expect(bySlug.data).toEqual({
+    visible: { id: visible.id, publishedAt: expect.any(String) },
+    draft: null,
+    scheduled: null,
+  })
+})
