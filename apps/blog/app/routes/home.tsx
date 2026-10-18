@@ -10,7 +10,7 @@ import type { Route } from './+types/home'
 
 const postIndexQuery = graphql`
   query PublicPostIndexQuery {
-    posts {
+    publishedPosts {
       id
       ...PostContent_post
     }
@@ -63,10 +63,10 @@ export default function Home() {
       >
         <div className="section-heading">
           <h2 id="dispatches-heading">Latest dispatches</h2>
-          <span>{data.posts.length} entries</span>
+          <span>{data.publishedPosts.length} entries</span>
         </div>
         <div className="post-list">
-          {data.posts.map((post, index) => (
+          {data.publishedPosts.map((post, index) => (
             <PostCard delay={0.08 * index} key={post.id} post={post} />
           ))}
         </div>

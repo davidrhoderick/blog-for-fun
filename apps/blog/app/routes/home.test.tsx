@@ -48,7 +48,7 @@ afterEach(() => {
 test('renders the dispatches returned by the public GraphQL API', {
   tags: ['integration'],
 }, async () => {
-  stubApi({ posts })
+  stubApi({ publishedPosts: posts })
 
   const { records } = await loader()
   renderHome(records)

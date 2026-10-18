@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 test('renders a note loaded by slug', { tags: ['integration'] }, async () => {
-  stubFetch({ data: { postBySlug: note } })
+  stubFetch({ data: { publishedPostBySlug: note } })
   stubMatchMedia()
 
   const loaderData = await callLoader({ slug: 'first-note' })
@@ -67,7 +67,7 @@ test('renders a note loaded by slug', { tags: ['integration'] }, async () => {
 test('returns 404 for a missing slug or an unknown note', {
   tags: ['unit'],
 }, async () => {
-  stubFetch({ data: { postBySlug: null } })
+  stubFetch({ data: { publishedPostBySlug: null } })
 
   const missingSlug = await callLoader({}).catch((error) => error)
   const unknownNote = await callLoader({ slug: 'nope' }).catch((error) => error)

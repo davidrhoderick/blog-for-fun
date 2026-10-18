@@ -1,7 +1,7 @@
 import { useFragment } from 'react-relay'
 import { Link } from 'react-router'
 import type { PostContent_post$key } from '~/__generated__/PostContent_post.graphql'
-import { postContentFragment, requirePublishedAt } from './post-content'
+import { postContentFragment } from './post-content'
 import { PostDate } from './post-date'
 import { Reveal } from './reveal'
 
@@ -25,7 +25,7 @@ export function PostCard({
   return (
     <Reveal delay={delay}>
       <article className="post-card">
-        <PostDate value={requirePublishedAt(data)} />
+        <PostDate value={data.publishedAt} />
         <Link prefetch="intent" to={`/posts/${data.slug}`}>
           <h3>{data.title}</h3>
           <p>{excerpt(data.markdownContent)}...</p>

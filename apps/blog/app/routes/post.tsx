@@ -10,7 +10,7 @@ import type { Route } from './+types/post'
 
 const postQuery = graphql`
   query PublicPostQuery($slug: Slug!) {
-    postBySlug(slug: $slug) {
+    publishedPostBySlug(slug: $slug) {
       id
       title
       markdownContent
@@ -35,7 +35,7 @@ export const loader = async ({ params }: Route.LoaderArgs) => {
     postQuery,
     variables,
   ).toPromise()
-  const post = result?.postBySlug
+  const post = result?.publishedPostBySlug
   if (!post) throw data(null, { status: 404 })
 
   return {
@@ -68,7 +68,7 @@ export default function Post({ loaderData }: Route.ComponentProps) {
     loaderData.variables,
     { fetchPolicy: 'store-or-network' },
   )
-  const post = result.postBySlug
+  const post = result.publishedPostBySlug
   if (!post) {
     // The loader 404s a missing slug; reaching here means the store lost it.
     throw new Error('PublicPostQuery returned no post for a resolved slug')

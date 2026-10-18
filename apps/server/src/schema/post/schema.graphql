@@ -2,6 +2,12 @@ type Query {
   post(id: ID!): Post
   postBySlug(slug: Slug!): Post
   posts: [Post!]!
+  """
+  Published posts visible to anonymous readers. `publishedAt` is non-null
+  because this surface never includes drafts or scheduled posts.
+  """
+  publishedPosts: [PublishedPost!]!
+  publishedPostBySlug(slug: Slug!): PublishedPost
   postRevision(id: ID!): PostRevision
   """
   Revisions for a post, ordered by descending revision number, newest first.
@@ -94,6 +100,18 @@ type Post implements Entity {
     """
     after: String
   ): PostRevisionConnection!
+}
+
+"""
+A post as the public site sees it. Only published posts reach this type, so
+`publishedAt` is part of the contract rather than nullable.
+"""
+type PublishedPost implements Entity {
+  id: ID!
+  slug: Slug!
+  title: NonEmptyString!
+  markdownContent: String!
+  publishedAt: DateTimeISO!
 }
 
 type PostRevisionConnection {
