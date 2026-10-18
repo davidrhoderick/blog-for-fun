@@ -8,10 +8,11 @@ import { createPublicRelayEnvironment } from '~/lib/relay'
 import { resolveGraphQLUrl } from '~/lib/relay.server'
 import type { Route } from './+types/post'
 
+// The loader reads title/markdownContent for `meta`; the fragment supplies the
+// component's data.
 const postQuery = graphql`
   query PublicPostQuery($slug: Slug!) {
     publishedPostBySlug(slug: $slug) {
-      id
       title
       markdownContent
       ...PostContent_post

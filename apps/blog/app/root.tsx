@@ -34,11 +34,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Every loader returns the page's Relay data as `records`.
   const matches = useMatches()
-  // The leaf match is the route being rendered; its loader returned the records.
-  const leaf = matches.at(-1)
-  const records = (leaf?.loaderData as { records?: InitialRecords } | undefined)
-    ?.records
+  // Matches run from the outermost layout to the page on screen, so the last
+  // one is the page we are rendering now.
+  const currentPage = matches.at(-1)
+  // Open that page's loader result and take the saved Relay data out of it.
+  const pageData = currentPage?.loaderData as
+    | { records?: InitialRecords }
+    | undefined
+  const records = pageData?.records
 
   return (
     <RelayScope records={records}>
