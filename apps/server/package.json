@@ -8,7 +8,7 @@
     "dev:codegen:watch": "graphql-codegen --watch",
     "dev:server": "tsx watch src/server.ts",
     "dev": "pnpm run dev:codegen && concurrently --kill-others-on-fail -n codegen,server \"pnpm run dev:codegen:watch\" \"pnpm run dev:server\"",
-    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node24 --external:@node-rs/argon2 --external:@libsql/* --external:libsql --external:@aws-sdk/* --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --sourcemap --outfile=dist/server.js",
+    "build": "node esbuild.config.mjs",
     "start": "node --enable-source-maps dist/server.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
