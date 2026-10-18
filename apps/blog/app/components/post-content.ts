@@ -13,3 +13,19 @@ export const postContentFragment = graphql`
     publishedAt
   }
 `
+
+/**
+ * The schema keeps `publishedAt` nullable and only the public resolvers filter
+ * to published posts, so null here means that invariant broke. Fail loudly
+ * rather than silently omitting the date.
+ */
+export const requirePublishedAt = (post: {
+  id: string
+  publishedAt: string | null
+}) => {
+  if (!post.publishedAt) {
+    throw new Error(`Published post ${post.id} is missing publishedAt`)
+  }
+
+  return post.publishedAt
+}

@@ -1,10 +1,12 @@
 import { useFragment } from 'react-relay'
 import { Link } from 'react-router'
 import type { PostContent_post$key } from '~/__generated__/PostContent_post.graphql'
-import { postContentFragment } from './post-content'
+import { postContentFragment, requirePublishedAt } from './post-content'
 import { PostDate } from './post-date'
 import { Reveal } from './reveal'
 
+// shortcut: regex Markdown stripping; nested or complex Markdown can leak syntax
+// into the excerpt. Replace with a real markdown-to-text pass if it matters.
 const excerpt = (markdown: string) =>
   markdown
     .replaceAll(/[^\w\s-]/g, '')
@@ -23,8 +25,7 @@ export function PostCard({
   return (
     <Reveal delay={delay}>
       <article className="post-card">
-        {/* publishedAt is nullable in the schema; public posts always have it. */}
-        {data.publishedAt ? <PostDate value={data.publishedAt} /> : null}
+        <PostDate value={requirePublishedAt(data)} />
         <Link prefetch="intent" to={`/posts/${data.slug}`}>
           <h3>{data.title}</h3>
           <p>{excerpt(data.markdownContent)}...</p>

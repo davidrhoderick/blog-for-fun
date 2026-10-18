@@ -13,13 +13,6 @@ const posts = [
     markdownContent: 'Something **worth** saying & more.',
     publishedAt: '2026-01-02T00:00:00.000Z',
   },
-  {
-    id: 'post-2',
-    slug: 'undated-note',
-    title: 'Undated note',
-    markdownContent: 'No date.',
-    publishedAt: null,
-  },
 ]
 
 const stubApi = (data: unknown) => {
@@ -63,23 +56,9 @@ test('renders the dispatches returned by the public GraphQL API', {
   expect(
     await screen.findByRole('heading', { name: 'First note' }),
   ).toBeTruthy()
-  expect(screen.getByText('2 entries')).toBeTruthy()
+  expect(screen.getByText('1 entries')).toBeTruthy()
   expect(screen.getByText('Something worth saying more...')).toBeTruthy()
   expect(screen.getByText('Jan 2, 2026')).toBeTruthy()
-})
-
-test('omits the date when a dispatch has no publish time', {
-  tags: ['unit'],
-}, async () => {
-  stubApi({ posts: posts.slice(1) })
-
-  const { records } = await loader()
-  const { container } = renderHome(records)
-
-  expect(
-    await screen.findByRole('heading', { name: 'Undated note' }),
-  ).toBeTruthy()
-  expect(container.querySelector('time')).toBeNull()
 })
 
 test('caches the index and describes it for search engines', {

@@ -68,12 +68,16 @@ export default function Post({ loaderData }: Route.ComponentProps) {
     loaderData.variables,
     { fetchPolicy: 'store-or-network' },
   )
+  const post = result.postBySlug
+  if (!post) {
+    // The loader 404s a missing slug; reaching here means the store lost it.
+    throw new Error('PublicPostQuery returned no post for a resolved slug')
+  }
 
   return (
     <main className="site-shell">
       <SiteHeader />
-      {/* The loader 404s for a missing post; this narrows Relay's nullable type. */}
-      {result.postBySlug ? <Article post={result.postBySlug} /> : null}
+      <Article post={post} />
     </main>
   )
 }

@@ -34,11 +34,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // The deepest match's loader serialized its Relay store; seed the provider with it.
-  const match = useMatches().at(-1)
-  const records = (
-    match?.loaderData as { records?: InitialRecords } | undefined
-  )?.records
+  const matches = useMatches()
+  // The leaf match is the route being rendered; its loader returned the records.
+  const leaf = matches.at(-1)
+  const records = (leaf?.loaderData as { records?: InitialRecords } | undefined)
+    ?.records
 
   return (
     <RelayScope records={records}>

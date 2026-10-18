@@ -3,7 +3,7 @@ import { useFragment } from 'react-relay'
 import { Link } from 'react-router'
 import remarkGfm from 'remark-gfm'
 import type { PostContent_post$key } from '~/__generated__/PostContent_post.graphql'
-import { postContentFragment } from './post-content'
+import { postContentFragment, requirePublishedAt } from './post-content'
 import { PostDate } from './post-date'
 import { Reveal } from './reveal'
 
@@ -18,8 +18,7 @@ export function Article({ post }: { post: PostContent_post$key }) {
         </Link>
         <header className="article-header">
           <p className="eyebrow">
-            {/* Schema keeps publishedAt nullable; public posts always have it. */}
-            {data.publishedAt ? <PostDate value={data.publishedAt} /> : null}
+            <PostDate value={requirePublishedAt(data)} />
           </p>
           <h1>{data.title}</h1>
         </header>
