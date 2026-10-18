@@ -14,7 +14,7 @@ const postQuery = graphql`
       id
       title
       markdownContent
-      ...Article_post
+      ...PostContent_post
     }
   }
 `
@@ -72,6 +72,7 @@ export default function Post({ loaderData }: Route.ComponentProps) {
   return (
     <main className="site-shell">
       <SiteHeader />
+      {/* The loader 404s for a missing post; this narrows Relay's nullable type. */}
       {result.postBySlug ? <Article post={result.postBySlug} /> : null}
     </main>
   )

@@ -12,7 +12,7 @@ const postIndexQuery = graphql`
   query PublicPostIndexQuery {
     posts {
       id
-      ...PostCard_post
+      ...PostContent_post
     }
   }
 `
@@ -37,6 +37,7 @@ export const meta: Route.MetaFunction = () => [
 ]
 
 export default function Home() {
+  // The loader already fetched this query and serialized its store; this reads it.
   const data = useLazyLoadQuery<PublicPostIndexQuery>(
     postIndexQuery,
     {},

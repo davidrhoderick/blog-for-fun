@@ -1,23 +1,14 @@
 import ReactMarkdown from 'react-markdown'
-import { graphql, useFragment } from 'react-relay'
+import { useFragment } from 'react-relay'
 import { Link } from 'react-router'
 import remarkGfm from 'remark-gfm'
-import type { Article_post$key } from '~/__generated__/Article_post.graphql'
+import type { PostContent_post$key } from '~/__generated__/PostContent_post.graphql'
+import { postContentFragment } from './post-content'
 import { PostDate } from './post-date'
 import { Reveal } from './reveal'
 
-const articleFragment = graphql`
-  fragment Article_post on Post {
-    id
-    slug
-    title
-    markdownContent
-    publishedAt
-  }
-`
-
-export function Article({ post }: { post: Article_post$key }) {
-  const data = useFragment(articleFragment, post)
+export function Article({ post }: { post: PostContent_post$key }) {
+  const data = useFragment(postContentFragment, post)
 
   return (
     <article className="article">
@@ -27,6 +18,7 @@ export function Article({ post }: { post: Article_post$key }) {
         </Link>
         <header className="article-header">
           <p className="eyebrow">
+            {/* Schema keeps publishedAt nullable; public posts always have it. */}
             {data.publishedAt ? <PostDate value={data.publishedAt} /> : null}
           </p>
           <h1>{data.title}</h1>
