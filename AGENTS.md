@@ -6,6 +6,20 @@ changing code:
 - [docs/architecture.md](docs/architecture.md) — layering, composition, thresholds.
 - [docs/testing.md](docs/testing.md) — TDD, unit vs integration, coverage.
 
+## Capability map
+
+Pointers, not explanations. Commands live in each package's `package.json`.
+
+| Capability | Implementation |
+|---|---|
+| Authentication, sessions, recovery | `apps/server/src/auth/`, `apps/server/src/scripts/` |
+| Posts and publication | `apps/server/src/services/posts/`, `apps/server/src/schema/post/` |
+| Media library | `apps/server/src/services/media/` |
+| Admin UI | `apps/admin/app/routes/` |
+| Public blog | `apps/blog/app/routes/` |
+| Database | `apps/server/src/db/`, `apps/server/migrations/` |
+| Trust pipeline | `trust-pipeline/` |
+
 ## Trust pipeline
 
 Every task ends by running the local pipeline (`pnpm verify`):
