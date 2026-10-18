@@ -8,4 +8,3 @@ apps/server/*.db
 coverage/
 report/
 .serena/
-apps/server/dist/
