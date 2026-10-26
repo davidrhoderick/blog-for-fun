@@ -30,9 +30,8 @@ test('the engine imports no app code', { tags: ['unit'] }, () => {
         APP_PACKAGES.some(
           (name) => fileName === name || fileName.startsWith(`${name}/`),
         )
-      if (relativeApp || bareApp) {
+      if (relativeApp || bareApp)
         offenders.push(`${path.relative(REPO_ROOT, full)} → ${fileName}`)
-      }
     }
   }
 

@@ -2,9 +2,8 @@ import { confirm, input, password } from '@inquirer/prompts'
 import { recoverAdministratorPassword } from '../auth/account'
 import { env } from '../lib/env'
 
-if (!process.stdin.isTTY) {
+if (!process.stdin.isTTY)
   throw new Error('Password recovery must run interactively')
-}
 
 const target = new URL(env.tursoConnectionUrl)
 const location =
@@ -27,9 +26,7 @@ const confirmation = await password({
   message: 'Confirm password:',
   mask: '*',
 })
-if (newPassword !== confirmation) {
-  throw new Error('Passwords do not match')
-}
+if (newPassword !== confirmation) throw new Error('Passwords do not match')
 
 const authUserId = await recoverAdministratorPassword(email, newPassword)
 console.info(`Recovered password for ${email} (${authUserId})`)

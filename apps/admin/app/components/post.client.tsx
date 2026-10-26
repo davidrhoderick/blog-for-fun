@@ -105,9 +105,7 @@ const toPostFormValues = (post: {
 
 const PostEditor = ({ id }: { id: string }) => {
   const data = useLazyLoadQuery<PostEditorQuery>(postEditorQuery, { id })
-  if (!data.post) {
-    return <p className="editor-loading">Post not found.</p>
-  }
+  if (!data.post) return <p className="editor-loading">Post not found.</p>
 
   return (
     <PostEditorForm id={id} mediaAssets={data.mediaAssets} post={data.post} />

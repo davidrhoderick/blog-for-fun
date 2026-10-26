@@ -17,9 +17,7 @@ const duplicateSlugError = () =>
 
 const ensureSlugIsAvailable = async (slug: string, id?: string) => {
   const post = await getPostBySlug(slug)
-  if (post && post.id !== id) {
-    throw duplicateSlugError()
-  }
+  if (post && post.id !== id) throw duplicateSlugError()
 }
 
 const isDuplicateSlugError = (error: unknown) =>
@@ -57,9 +55,7 @@ const createPost = async (input: CreatePostInput) => {
       .returning()
     return toPost(post)
   } catch (error) {
-    if (isDuplicateSlugError(error)) {
-      throw duplicateSlugError()
-    }
+    if (isDuplicateSlugError(error)) throw duplicateSlugError()
 
     throw error
   }
@@ -67,9 +63,7 @@ const createPost = async (input: CreatePostInput) => {
 
 const updatePost = async (id: string, input: PutPostInput) => {
   const post = await getPost(id)
-  if (!post) {
-    throw new GraphQLError('Post not found')
-  }
+  if (!post) throw new GraphQLError('Post not found')
 
   if (
     input.slug === null ||
@@ -92,13 +86,9 @@ const updatePost = async (id: string, input: PutPostInput) => {
     (values.title !== undefined && values.title !== post.title) ||
     (values.markdownContent !== undefined &&
       values.markdownContent !== post.markdownContent)
-  if (!slugChanged && !contentChanged) {
-    return post
-  }
+  if (!slugChanged && !contentChanged) return post
 
-  if (slugChanged && values.slug) {
-    await ensureSlugIsAvailable(values.slug, id)
-  }
+  if (slugChanged && values.slug) await ensureSlugIsAvailable(values.slug, id)
 
   try {
     const updatedPost = await db.transaction(async (tx) => {
@@ -125,18 +115,15 @@ const updatePost = async (id: string, input: PutPostInput) => {
     })
     return toPost(updatedPost)
   } catch (error) {
-    if (isDuplicateSlugError(error)) {
-      throw duplicateSlugError()
-    }
+    if (isDuplicateSlugError(error)) throw duplicateSlugError()
 
     throw error
   }
 }
 
 export const putPost = async (input: PutPostInput) => {
-  if (input.id !== undefined && input.id !== null) {
+  if (input.id !== undefined && input.id !== null)
     return updatePost(input.id, input)
-  }
 
   return createPost(createPostInput(input))
 }

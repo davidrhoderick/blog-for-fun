@@ -4,9 +4,8 @@ import type { Route } from './+types/authenticated-layout'
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { body, setCookie } = await getViewer(request)
-  if (!body.data?.viewer) {
+  if (!body.data?.viewer)
     return redirect('/login', { headers: responseHeaders(setCookie) })
-  }
 
   return data(
     { viewer: body.data.viewer },

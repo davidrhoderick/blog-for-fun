@@ -66,6 +66,4 @@ async function main(): Promise<void> {
   process.exit(result.ok ? 0 : 1)
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  await main()
-}
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main()

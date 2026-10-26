@@ -77,12 +77,9 @@ export const recoverAdministratorPassword = async (
     .where(eq(authPasswordCredentials.email, normalizedEmail))
     .limit(1)
 
-  if (!credential) {
-    throw new Error('No account exists with that email address')
-  }
-  if (credential.status !== 'active') {
+  if (!credential) throw new Error('No account exists with that email address')
+  if (credential.status !== 'active')
     throw new Error('That account is disabled; enable it before recovering it')
-  }
 
   const passwordHash = await hashPassword(newPassword)
 
@@ -115,9 +112,7 @@ export const bootstrapAdministrator = async (
 ) => {
   const email = validateEmail(input.email)
   const displayName = input.displayName.trim()
-  if (!displayName) {
-    throw new Error('Display name is required')
-  }
+  if (!displayName) throw new Error('Display name is required')
 
   const passwordHash = await hashPassword(input.password)
   const authUserId = crypto.randomUUID()

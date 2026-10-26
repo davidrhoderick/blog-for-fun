@@ -15,9 +15,7 @@ export const publishPost = async (
   publishedAt?: Date | string | null,
 ) => {
   const post = await getPost(id)
-  if (!post) {
-    throw new GraphQLError('Post not found')
-  }
+  if (!post) throw new GraphQLError('Post not found')
 
   const currentPublishedAt = post.publishedAt
     ? normalizeTimestamp(post.publishedAt)
@@ -29,9 +27,7 @@ export const publishPost = async (
       ? currentPublishedAt
       : now
 
-  if (currentPublishedAt?.getTime() === nextPublishedAt.getTime()) {
-    return post
-  }
+  if (currentPublishedAt?.getTime() === nextPublishedAt.getTime()) return post
 
   const [updatedPost] = await db
     .update(posts)
@@ -43,13 +39,9 @@ export const publishPost = async (
 
 export const unpublishPost = async (id: string) => {
   const post = await getPost(id)
-  if (!post) {
-    throw new GraphQLError('Post not found')
-  }
+  if (!post) throw new GraphQLError('Post not found')
 
-  if (!post.publishedAt) {
-    return post
-  }
+  if (!post.publishedAt) return post
 
   const [updatedPost] = await db
     .update(posts)

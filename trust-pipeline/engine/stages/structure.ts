@@ -38,9 +38,8 @@ export const structureStage: Stage = {
       if (isIgnored(rel, cfg.ignore)) {
         // Ignored files are exempt from the size rules, but test files still
         // have to carry a tag, which is where their timeout comes from.
-        if (TEST_FILE.test(rel)) {
+        if (TEST_FILE.test(rel))
           violations.push(...checkTestTags({ filePath: rel, source }))
-        }
         continue
       }
       const routeModule = path.matchesGlob(rel, cfg.routeFiles)
@@ -55,9 +54,8 @@ export const structureStage: Stage = {
       )
       violations.push(...checkIgnoreReasons({ filePath: rel, source }))
       violations.push(...checkClientSuspense({ filePath: rel, source }))
-      if (routeModule) {
+      if (routeModule)
         violations.push(...checkRouteExports({ filePath: rel, source }))
-      }
     }
     return {
       name: 'structure',

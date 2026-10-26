@@ -93,9 +93,8 @@ test('app code stays free of pipeline infrastructure', {
             path
               .resolve(path.dirname(file), fileName)
               .startsWith(`${PIPELINE_DIR}${path.sep}`))
-        if (intoPipeline) {
+        if (intoPipeline)
           offenders.push(`${path.relative(REPO_ROOT, file)} → ${fileName}`)
-        }
       }
     }
   }
@@ -133,9 +132,8 @@ test('mappers read types from db/schema but never the db client', {
     for (const target of relativeImports(file)) {
       const typesOnly =
         target === DB_SCHEMA || target.startsWith(`${DB_SCHEMA}${path.sep}`)
-      if (target.startsWith(DB_DIR) && !typesOnly) {
+      if (target.startsWith(DB_DIR) && !typesOnly)
         offenders.push(`${repoPath(file)} → ${repoPath(target)}`)
-      }
     }
   }
 

@@ -19,9 +19,8 @@ export const resolveGraphQLUrl = (
   value = process.env.GRAPHQL_URL,
   environment = process.env.NODE_ENV,
 ) => {
-  if (!value && environment === 'production') {
+  if (!value && environment === 'production')
     throw new Error('GRAPHQL_URL is required in production')
-  }
 
   const configuredValue = value ?? 'http://localhost:4000/graphql'
   let url: URL
@@ -31,13 +30,11 @@ export const resolveGraphQLUrl = (
     throw new Error('GRAPHQL_URL must be an absolute URL')
   }
 
-  if (!['http:', 'https:'].includes(url.protocol)) {
+  if (!['http:', 'https:'].includes(url.protocol))
     throw new Error('GRAPHQL_URL must use HTTP or HTTPS')
-  }
   const loopback = ['127.0.0.1', '::1', 'localhost'].includes(url.hostname)
-  if (environment === 'production' && url.protocol !== 'https:' && !loopback) {
+  if (environment === 'production' && url.protocol !== 'https:' && !loopback)
     throw new Error('GRAPHQL_URL must use HTTPS in production')
-  }
 
   return url.toString()
 }
@@ -88,9 +85,8 @@ export const requestGraphQL = async <T>(
     body: JSON.stringify({ query, variables }),
   })
 
-  if (!response.ok) {
+  if (!response.ok)
     throw new Error(`GraphQL server returned HTTP ${response.status}`)
-  }
 
   return {
     body: (await response.json()) as GraphQLResponse<T>,
