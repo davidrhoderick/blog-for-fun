@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import type { Plugin } from '@opencode/plugin'
 import {
@@ -6,6 +7,10 @@ import {
   type RetryOption,
   retryChoices,
 } from '../../trust-pipeline/engine/retry'
+import {
+  shouldVerifyAfterTask,
+  startupPromptAction,
+} from '../../trust-pipeline/engine/startup'
 
 const execFileAsync = promisify(execFile)
 
@@ -18,6 +23,11 @@ type RetryState = {
   remaining: number
   options: RetryOption[]
 }
+
+type StartupState =
+  | { status: 'ready' }
+  | { status: 'blocked'; output: string }
+  | { status: 'repairing'; output: string; repairToken: string }
 
 const getWorktreeStatus = async (directory: string) => {
   try {
@@ -44,6 +54,32 @@ const runVerify = async (directory: string) => {
 }
 
 const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
+const startupKey = (sessionID: string) => `pipeline-startup:${sessionID}`
+
+const loadStartupState = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+): Promise<StartupState | undefined> =>
+  (await ctx.storage.get(startupKey(sessionID))) as StartupState | undefined
+
+const saveStartupState = (
+  ctx: Plugin.Context,
+  sessionID: string,
+  state: StartupState,
+) => ctx.storage.set(startupKey(sessionID), state)
+
+const startupFailure = (output: string) =>
+  new Error(
+    `Startup \`pnpm verify\` failed; this prompt was not admitted. ` +
+      'Run /pipeline-repair to fix the blockers, then resend your task.\n\n' +
+      output.slice(-2000).trim(),
+  )
+
+const repairInstructions = (output: string) =>
+  'Repair only the startup verification failures below. Do not work on other tasks, ' +
+  'suppress findings, add ignores, or weaken checks. Once fixed, stop; verification ' +
+  'will run automatically.\n\n' +
+  output.slice(-2000).trim()
 
 const loadState = async (
   ctx: Plugin.Context,
@@ -66,10 +102,13 @@ const gateSession = async (
   previousStatus: string | null,
   currentStatus: string | null,
 ): Promise<void> => {
+  const startup = await loadStartupState(ctx, sessionID)
   if (
-    previousStatus !== null &&
-    currentStatus !== null &&
-    previousStatus === currentStatus
+    !shouldVerifyAfterTask(
+      previousStatus,
+      currentStatus,
+      startup?.status === 'repairing',
+    )
   ) {
     return
   }
@@ -77,6 +116,13 @@ const gateSession = async (
   const { ok, output } = await runVerify(ctx.location.directory)
   if (ok) {
     await ctx.storage.remove(stateKey(sessionID))
+    if (startup?.status === 'repairing') {
+      await saveStartupState(ctx, sessionID, { status: 'ready' })
+      await ctx.session.synthetic({
+        sessionID,
+        text: 'Startup verification passed. Please resend the development task that was blocked.',
+      })
+    }
     return
   }
 
@@ -90,6 +136,37 @@ const gateSession = async (
       remaining > 0
         ? `\`pnpm verify\` failed. Fix the reported failures intentionally — no suppressions, ignores, or weaker configuration. Do not run the pipeline yourself; it runs again automatically when you stop. ${remaining} automatic attempt${remaining === 1 ? '' : 's'} remain before you must ask the user.\n\n${output.slice(-2000).trim()}`
         : `\`pnpm verify\` is still failing and the automatic retry budget is exhausted. Stop working now and ask the user what to do next with the \`question\` tool, offering exactly these options in this order: ${options.map((option) => `"${option.label}"`).join(', ')}. Do not run the pipeline yourself.`,
+    ...(startup?.status === 'repairing'
+      ? { metadata: { trustPipelineRepair: startup.repairToken } }
+      : {}),
+  })
+}
+
+async function repairStartup(
+  ctx: Plugin.Context,
+  sessionID: string,
+  directory: string,
+): Promise<void> {
+  const { ok, output } = await runVerify(directory)
+  if (ok) {
+    await saveStartupState(ctx, sessionID, { status: 'ready' })
+    await ctx.session.synthetic({
+      sessionID,
+      text: 'Startup verification passed. Please resend your development task.',
+    })
+    return
+  }
+
+  const repairToken = randomUUID()
+  await saveStartupState(ctx, sessionID, {
+    status: 'repairing',
+    output,
+    repairToken,
+  })
+  await ctx.session.prompt({
+    sessionID,
+    text: repairInstructions(output),
+    metadata: { trustPipelineRepair: repairToken },
   })
 }
 
@@ -136,7 +213,39 @@ export default {
     const worktreeStatusBySession = new Map<string, string | null>()
     const controller = new AbortController()
 
+    await ctx.command.transform((editor) => {
+      editor.add({
+        name: 'pipeline-repair',
+        description: 'Repair startup verification blockers before development',
+        execute: async ({ sessionID }) =>
+          repairStartup(ctx, sessionID, directory),
+      })
+    })
+
     await ctx.session.hook('prompt', async (event) => {
+      const startup = await loadStartupState(ctx, event.sessionID)
+      const action = startupPromptAction(
+        startup?.status,
+        event.metadata,
+        event.prompt.text,
+        startup?.status === 'repairing' ? startup.repairToken : undefined,
+      )
+      if (action === 'block') {
+        throw startupFailure(
+          startup?.output ?? 'Run /pipeline-repair to retry.',
+        )
+      }
+      if (action === 'verify') {
+        const result = await runVerify(directory)
+        if (!result.ok) {
+          await saveStartupState(ctx, event.sessionID, {
+            status: 'blocked',
+            output: result.output,
+          })
+          throw startupFailure(result.output)
+        }
+        await saveStartupState(ctx, event.sessionID, { status: 'ready' })
+      }
       worktreeStatusBySession.set(
         event.sessionID,
         await getWorktreeStatus(directory),
