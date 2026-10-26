@@ -5,10 +5,13 @@
     "graphql:generate": "pnpm --filter server run dev:codegen",
     "codegen": "pnpm --filter server run dev:codegen && pnpm --filter admin run codegen && pnpm --filter blog run codegen",
     "test": "pnpm -r --workspace-concurrency=1 run test",
-    "test:coverage": "pnpm -r --workspace-concurrency=1 run test:coverage"
+    "test:coverage": "pnpm -r --workspace-concurrency=1 run test:coverage",
+    "product": "headroom wrap opencode -- mini --agent product-dev",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^22.20.2",
     "typescript": "^5.9.3"
   },

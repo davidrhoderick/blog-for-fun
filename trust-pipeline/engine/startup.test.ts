@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { decideStartup, statusAfterVerify } from './startup'
+import { decideStartup, skipsTrustPipeline, statusAfterVerify } from './startup'
 
 test('an unchecked session triggers verification', { tags: ['unit'] }, () => {
   expect(decideStartup(undefined)).toEqual({ kind: 'verify' })
@@ -24,4 +24,20 @@ test('a failing verification blocks and remembers output', {
     status: 'blocked',
     output: 'boom',
   })
+})
+
+test('the product-dev agent skips the trust pipeline', {
+  tags: ['unit'],
+}, () => {
+  expect(skipsTrustPipeline({}, 'product-dev')).toBe(true)
+})
+
+test('the env opt-out skips the trust pipeline for any agent', {
+  tags: ['unit'],
+}, () => {
+  expect(skipsTrustPipeline({ OPENCODE_PRODUCT_MODE: '1' }, 'build')).toBe(true)
+})
+
+test('a normal agent runs the trust pipeline', { tags: ['unit'] }, () => {
+  expect(skipsTrustPipeline({}, 'build')).toBe(false)
 })

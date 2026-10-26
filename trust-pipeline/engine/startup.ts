@@ -33,3 +33,15 @@ export function statusAfterVerify(
 ): { status: StartupStatus; output?: string } {
   return ok ? { status: 'ready' } : { status: 'blocked', output }
 }
+
+/**
+ * The product phase runs without the trust pipeline: the `product-dev` agent
+ * and an explicit `OPENCODE_PRODUCT_MODE=1` opt-out both skip it. See
+ * docs/verification-first/.
+ */
+export function skipsTrustPipeline(
+  env: Record<string, string | undefined>,
+  agent: string | undefined,
+): boolean {
+  return env.OPENCODE_PRODUCT_MODE === '1' || agent === 'product-dev'
+}

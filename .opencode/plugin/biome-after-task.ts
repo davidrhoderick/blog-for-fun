@@ -9,6 +9,7 @@ import {
 import {
   decideStartup,
   type StartupStatus,
+  skipsTrustPipeline,
   statusAfterVerify,
 } from '../../trust-pipeline/engine/startup'
 
@@ -94,6 +95,22 @@ const repairInstructions = (output: string) =>
 const retryChoices = (spent: number) =>
   engineRetryChoices(spent) as RetryOption[]
 
+// Product phase: no trust pipeline. Skip for the product-dev agent (and an
+// explicit opt-out env var). See docs/verification-first/.
+async function sessionSkipsPipeline(
+  ctx: Plugin.Context,
+  sessionID: string,
+): Promise<boolean> {
+  if (process.env.OPENCODE_PRODUCT_MODE === '1') return true
+  try {
+    const session = await ctx.session.get({ sessionID })
+    return skipsTrustPipeline(process.env, session?.agent)
+  } catch {
+    // Fall through to the normal gate if the session cannot be read.
+    return false
+  }
+}
+
 async function handleIdleSession(
   ctx: Plugin.Context,
   sessionID: string,
@@ -101,6 +118,8 @@ async function handleIdleSession(
   worktreeStatusBySession: Map<string, string | null>,
   _pendingSessions: Set<string>,
 ): Promise<void> {
+  if (await sessionSkipsPipeline(ctx, sessionID)) return
+
   const previousStatus = worktreeStatusBySession.get(sessionID)
   worktreeStatusBySession.delete(sessionID)
   const currentStatus = await getWorktreeStatus(directory)
@@ -148,6 +167,15 @@ async function handlePrompt(
   worktreeStatusBySession: Map<string, string | null>,
   pendingSessions: Set<string>,
 ): Promise<void> {
+  if (await sessionSkipsPipeline(ctx, event.sessionID)) {
+    worktreeStatusBySession.set(
+      event.sessionID,
+      await getWorktreeStatus(directory),
+    )
+    pendingSessions.add(event.sessionID)
+    return
+  }
+
   const startup = await loadStartupState(ctx, event.sessionID)
   const decision = decideStartup(startup?.status)
 
