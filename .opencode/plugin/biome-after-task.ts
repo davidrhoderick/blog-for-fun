@@ -66,6 +66,16 @@ const gateSession = async (
   previousStatus: string | null,
   currentStatus: string | null,
 ): Promise<void> => {
+  // Product phase: no trust pipeline. Skip for the product-dev agent (and an
+  // explicit opt-out env var). See docs/verification-first/.
+  if (process.env.OPENCODE_PRODUCT_MODE === '1') return
+  try {
+    const session = await ctx.session.get({ sessionID })
+    if (session?.agent === 'product-dev') return
+  } catch {
+    // Fall through to the normal gate if the session cannot be read.
+  }
+
   if (
     previousStatus !== null &&
     currentStatus !== null &&
