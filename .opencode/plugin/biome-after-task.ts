@@ -2,59 +2,33 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { Plugin } from '@opencode/plugin'
 import {
-  retryChoices as engineRetryChoices,
   matchRetryAnswer,
   type RetryOption,
+  retryChoices,
 } from '../../trust-pipeline/engine/retry'
-import {
-  decideStartup,
-  type StartupStatus,
-  skipsTrustPipeline,
-  statusAfterVerify,
-} from '../../trust-pipeline/engine/startup'
 
 const execFileAsync = promisify(execFile)
 
 const AUTOMATIC_ATTEMPTS = 3
 
+// The option list the plugin offered, stored alongside the session state so an
+// answer is matched against what was actually asked, never re-derived.
 type RetryState = {
   spent: number
   remaining: number
-  options: Array<{ label: string; attempts: number | null }>
+  options: RetryOption[]
 }
 
-type StartupState = {
-  status: StartupStatus
-  output?: string
+const getWorktreeStatus = async (directory: string) => {
+  try {
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
+      cwd: directory,
+    })
+    return stdout
+  } catch {
+    return null
+  }
 }
-
-const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
-const startupKey = (sessionID: string) => `pipeline-startup:${sessionID}`
-
-const loadState = async (
-  ctx: Plugin.Context,
-  sessionID: string,
-): Promise<RetryState> => {
-  const stored = (await ctx.storage.get(stateKey(sessionID))) as
-    | RetryState
-    | undefined
-  return stored ?? { spent: 0, remaining: AUTOMATIC_ATTEMPTS, options: [] }
-}
-
-const saveState = (ctx: Plugin.Context, sessionID: string, state: RetryState) =>
-  ctx.storage.set(stateKey(sessionID), state)
-
-const loadStartupState = async (
-  ctx: Plugin.Context,
-  sessionID: string,
-): Promise<StartupState | undefined> =>
-  (await ctx.storage.get(startupKey(sessionID))) as StartupState | undefined
-
-const saveStartupState = (
-  ctx: Plugin.Context,
-  sessionID: string,
-  state: StartupState,
-) => ctx.storage.set(startupKey(sessionID), state)
 
 const runVerify = async (directory: string) => {
   try {
@@ -69,60 +43,38 @@ const runVerify = async (directory: string) => {
   }
 }
 
-const getWorktreeStatus = async (directory: string) => {
-  try {
-    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
-      cwd: directory,
-    })
-    return stdout
-  } catch {
-    return null
-  }
-}
+const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
 
-const startupBanner = (output: string) =>
-  '⛔ STARTUP VERIFICATION FAILED ⛔\n\n' +
-  'Do NOT proceed with any development work. The local trust pipeline is red.\n' +
-  'Fix the issues below, then run /pipeline-repair to recheck.\n\n' +
-  output.slice(-2000).trim()
-
-const repairInstructions = (output: string) =>
-  'Repair only the startup verification failures below. Do not work on other tasks, ' +
-  'suppress findings, add ignores, or weaken checks. Once fixed, stop; verification ' +
-  'will run automatically.\n\n' +
-  output.slice(-2000).trim()
-
-const retryChoices = (spent: number) =>
-  engineRetryChoices(spent) as RetryOption[]
-
-// Product phase: no trust pipeline. Skip for the product-dev agent (and an
-// explicit opt-out env var). See docs/verification-first/.
-async function sessionSkipsPipeline(
+const loadState = async (
   ctx: Plugin.Context,
   sessionID: string,
-): Promise<boolean> {
-  if (process.env.OPENCODE_PRODUCT_MODE === '1') return true
+): Promise<RetryState> => {
+  const stored = (await ctx.storage.get(stateKey(sessionID))) as
+    | RetryState
+    | undefined
+  return stored ?? { spent: 0, remaining: AUTOMATIC_ATTEMPTS, options: [] }
+}
+
+const saveState = (ctx: Plugin.Context, sessionID: string, state: RetryState) =>
+  ctx.storage.set(stateKey(sessionID), state)
+
+// Runs the pipeline after a task. Green resets the session; red spends one
+// automatic attempt, and once none remain the agent is told to ask the user.
+const gateSession = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+  previousStatus: string | null,
+  currentStatus: string | null,
+): Promise<void> => {
+  // Product phase: no trust pipeline. Skip for the product-dev agent (and an
+  // explicit opt-out env var). See docs/verification-first/.
+  if (process.env.OPENCODE_PRODUCT_MODE === '1') return
   try {
     const session = await ctx.session.get({ sessionID })
-    return skipsTrustPipeline(process.env, session?.agent)
+    if (session?.agent === 'product-dev') return
   } catch {
     // Fall through to the normal gate if the session cannot be read.
-    return false
   }
-}
-
-async function handleIdleSession(
-  ctx: Plugin.Context,
-  sessionID: string,
-  directory: string,
-  worktreeStatusBySession: Map<string, string | null>,
-  _pendingSessions: Set<string>,
-): Promise<void> {
-  if (await sessionSkipsPipeline(ctx, sessionID)) return
-
-  const previousStatus = worktreeStatusBySession.get(sessionID)
-  worktreeStatusBySession.delete(sessionID)
-  const currentStatus = await getWorktreeStatus(directory)
 
   if (
     previousStatus !== null &&
@@ -132,25 +84,16 @@ async function handleIdleSession(
     return
   }
 
-  const { ok, output } = await runVerify(directory)
+  const { ok, output } = await runVerify(ctx.location.directory)
   if (ok) {
     await ctx.storage.remove(stateKey(sessionID))
-    const startup = await loadStartupState(ctx, sessionID)
-    if (startup?.status === 'blocked') {
-      await saveStartupState(ctx, sessionID, { status: 'ready' })
-      await ctx.session.synthetic({
-        sessionID,
-        text: 'Startup verification passed. Please resend the development task that was blocked.',
-      })
-    }
     return
   }
 
   const state = await loadState(ctx, sessionID)
   const remaining = Math.max(state.remaining - 1, 0)
-  const options = remaining > 0 ? [] : retryChoices(state.spent)
+  const options: RetryOption[] = remaining > 0 ? [] : retryChoices(state.spent)
   await saveState(ctx, sessionID, { spent: state.spent, remaining, options })
-
   await ctx.session.prompt({
     sessionID,
     text:
@@ -160,77 +103,38 @@ async function handleIdleSession(
   })
 }
 
-async function handlePrompt(
+// The plugin cannot call the `question` tool, so it watches the answer the
+// agent collects and matches it (trimmed, exact) against the option list it
+// stored when it asked: a granted budget advances the ladder, other
+// instructions do not, and an unmatched answer is a no-op.
+// shortcut: assumes the question tool's result metadata carries `answers` as
+// string[][]; if that shape changes the ladder stops shrinking (the gate still
+// blocks). Upgrade by subscribing to the question.replied event instead.
+const applyAnswer = async (
   ctx: Plugin.Context,
-  event: { sessionID: string; prompt: { text: string } },
-  directory: string,
-  worktreeStatusBySession: Map<string, string | null>,
-  pendingSessions: Set<string>,
-): Promise<void> {
-  if (await sessionSkipsPipeline(ctx, event.sessionID)) {
-    worktreeStatusBySession.set(
-      event.sessionID,
-      await getWorktreeStatus(directory),
-    )
-    pendingSessions.add(event.sessionID)
+  sessionID: string,
+  metadata: unknown,
+): Promise<void> => {
+  const state = await loadState(ctx, sessionID)
+  if (state.remaining > 0) return
+
+  const answers = (metadata as { answers?: unknown } | undefined)?.answers
+  const [first] = Array.isArray(answers) ? answers : []
+  const answer =
+    Array.isArray(first) && typeof first[0] === 'string' ? first[0] : undefined
+  if (answer === undefined) return
+
+  const option = matchRetryAnswer(state.options, answer)
+  if (option === undefined) return
+
+  if (option.attempts === null) {
+    await saveState(ctx, sessionID, { ...state, remaining: 1, options: [] })
     return
   }
-
-  const startup = await loadStartupState(ctx, event.sessionID)
-  const decision = decideStartup(startup?.status)
-
-  if (decision.kind === 'admit') {
-    worktreeStatusBySession.set(
-      event.sessionID,
-      await getWorktreeStatus(directory),
-    )
-    pendingSessions.add(event.sessionID)
-    return
-  }
-
-  // decision.kind is 'verify' (unchecked) or 'block' (already blocked): run
-  // verify again so a fixed `.env` or lockfile unlocks without a manual reset.
-  const result = await runVerify(directory)
-  const next = statusAfterVerify(result.ok, result.output)
-  await saveStartupState(ctx, event.sessionID, next)
-
-  if (next.status === 'ready') {
-    worktreeStatusBySession.set(
-      event.sessionID,
-      await getWorktreeStatus(directory),
-    )
-    pendingSessions.add(event.sessionID)
-    return
-  }
-
-  event.prompt.text = `${startupBanner(result.output)}\n\n${event.prompt.text}`
-}
-
-async function registerRepairCommand(
-  ctx: Plugin.Context,
-  directory: string,
-): Promise<void> {
-  await ctx.command.transform((editor) => {
-    editor.add({
-      name: 'pipeline-repair',
-      description: 'Repair startup verification blockers before development',
-      execute: async ({ sessionID }) => {
-        const { ok, output } = await runVerify(directory)
-        const next = statusAfterVerify(ok, output)
-        await saveStartupState(ctx, sessionID, next)
-        if (next.status === 'ready') {
-          await ctx.session.synthetic({
-            sessionID,
-            text: 'Startup verification passed. Please resend your development task.',
-          })
-          return
-        }
-        await ctx.session.prompt({
-          sessionID,
-          text: repairInstructions(output),
-        })
-      },
-    })
+  await saveState(ctx, sessionID, {
+    spent: state.spent + 1,
+    remaining: option.attempts,
+    options: [],
   })
 }
 
@@ -242,51 +146,17 @@ export default {
     const worktreeStatusBySession = new Map<string, string | null>()
     const controller = new AbortController()
 
-    await registerRepairCommand(ctx, directory)
-
     await ctx.session.hook('prompt', async (event) => {
-      await handlePrompt(
-        ctx,
-        event,
-        directory,
-        worktreeStatusBySession,
-        pendingSessions,
+      worktreeStatusBySession.set(
+        event.sessionID,
+        await getWorktreeStatus(directory),
       )
+      pendingSessions.add(event.sessionID)
     })
 
     await ctx.tool.hook('execute.after', async (event) => {
       if (event.tool !== 'question' || event.status !== 'completed') return
-      const state = await loadState(ctx, event.sessionID)
-      if (state.remaining > 0) return
-
-      const result = event.result as
-        | { metadata?: { answers?: unknown } }
-        | undefined
-      const answers = result?.metadata?.answers
-      const [first] = Array.isArray(answers) ? answers : []
-      const answer =
-        Array.isArray(first) && typeof first[0] === 'string'
-          ? first[0]
-          : undefined
-      if (answer === undefined) return
-
-      const choices = state.options
-      const option = matchRetryAnswer(choices, answer)
-      if (option === undefined) return
-
-      if (option.attempts === null) {
-        await saveState(ctx, event.sessionID, {
-          ...state,
-          remaining: 1,
-          options: [],
-        })
-        return
-      }
-      await saveState(ctx, event.sessionID, {
-        spent: state.spent + 1,
-        remaining: option.attempts,
-        options: [],
-      })
+      await applyAnswer(ctx, event.sessionID, event.result.metadata)
     })
 
     void (async () => {
@@ -299,12 +169,15 @@ export default {
         ) {
           continue
         }
-        await handleIdleSession(
+
+        const sessionID = event.data.sessionID
+        const previousStatus = worktreeStatusBySession.get(sessionID)
+        worktreeStatusBySession.delete(sessionID)
+        await gateSession(
           ctx,
-          event.data.sessionID,
-          directory,
-          worktreeStatusBySession,
-          pendingSessions,
+          sessionID,
+          previousStatus ?? null,
+          await getWorktreeStatus(directory),
         )
       }
     })()
