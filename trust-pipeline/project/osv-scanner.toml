@@ -1,13 +1,5 @@
 # Accepted advisories for `osv-scanner` (run with --config). Each entry needs a
 # reason; mirror pnpm-workspace.yaml `auditConfig.ignoreGhsas` for the rest.
 [[IgnoredVulns]]
-id = "GHSA-vfj7-8cjw-p6xm"
-reason = "braces DoS; already accepted in pnpm-workspace.yaml auditConfig.ignoreGhsas"
-
-[[IgnoredVulns]]
-id = "GHSA-hp3w-g68c-fv3c"
-reason = "sprintf-js DoS; transitive (js-yaml via babel-plugin-relay, tedious via mssql); fix 1.1.4 not yet adopted"
-
-[[IgnoredVulns]]
 id = "MAL-2025-21003"
 reason = "fs@0.0.1-security is npm's security-holding placeholder pulled in by tsarch; it is never loaded (Node's built-in fs wins)"
