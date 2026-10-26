@@ -15,7 +15,9 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 1
+  # Cloudflare serves cached pages without waking the machine; only cache
+  # misses and admin requests start it.
+  min_machines_running = 0
   processes = ["app"]
 
   [[http_service.checks]]
