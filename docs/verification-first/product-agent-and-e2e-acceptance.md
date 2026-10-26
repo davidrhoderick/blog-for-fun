@@ -42,12 +42,12 @@ It does not cover integration-test generation, architectural refactoring, engine
 
 Use the existing application framework, database, and migration tools.
 
-Do not introduce a new coding agent or test framework when an existing tool meets the requirements. Playwright is not yet installed in this repository; add `@playwright/test` and `@playwright/mcp` when implementing the recording stage.
+Do not introduce a new coding agent or test framework when an existing tool meets the requirements. Playwright Test is already installed at the repository root (`@playwright/test`); acceptance tests live under `tests/`.
 
 ### Initial setup
 
-1. Copy `apps/server/.env.example` to `apps/server/.env` and fill in at least `TURSO_CONNECTION_URL` and `TURSO_AUTH_TOKEN`.
-2. Install Playwright packages in a new `e2e/` workspace or at the repository root when the recording stage is implemented.
+1. Copy `apps/server/.env.example` to `apps/server/.env`. Use a local database (`TURSO_CONNECTION_URL=file:local.db`, `TURSO_AUTH_TOKEN=local-token`); never point product work at a live/shared database.
+2. The Playwright MCP server is configured in `.opencode/opencode.json` (see below).
 3. Configure the Playwright MCP server in `.opencode/opencode.json`:
 
 ```jsonc
@@ -56,7 +56,7 @@ Do not introduce a new coding agent or test framework when an existing tool meet
     "servers": {
       "playwright": {
         "type": "local",
-        "command": ["bunx", "@playwright/mcp", "--devtools"]
+        "command": ["pnpm", "dlx", "@playwright/mcp", "--devtools"]
       }
     }
   }
@@ -144,8 +144,9 @@ Keep the same session and workspace until product accepts the feature.
 
 When product selects **Accept Feature**:
 
-- Save the current implementation to a Git commit.
+- Save the current implementation to a Git commit on a new branch off `main` (stacking only if explicitly requested).
 - Record the accepted revision (commit SHA).
+- Write a feature manifest (for example `docs/verification-first/features/<ticket>.md`) with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred).
 - Record the feature requirements and environment configuration.
 - Prevent later changes to the accepted implementation without a new revision.
 
@@ -155,7 +156,7 @@ Create a fresh environment from the accepted revision.
 
 Run migrations and load the required fixtures.
 
-Use Playwright recording to capture user interactions.
+Use Playwright MCP and/or Playwright codegen to record user interactions, then refine the recorded output into stable, reviewed tests.
 
 Product performs each accepted workflow in the browser.
 

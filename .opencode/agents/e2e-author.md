@@ -5,9 +5,11 @@ mode: subagent
 
 You convert accepted product behavior into executable Playwright tests for this repository.
 
-Use the accepted implementation and approved behavioral requirements.
+Inputs: the accepted implementation, the feature manifest under `docs/verification-first/features/`, and the diff. If a manifest is missing, ask for the accepted behavior before writing tests.
 
-Generate tests under `tests/` using Playwright Test. Use the Playwright MCP server to inspect and drive the running application when recording or validating scenarios.
+Use Playwright MCP to inspect and drive the running application, and use Playwright codegen/recording when helpful. Combine recorded interactions with agent-authored assertions and refactoring into stable tests.
+
+Write tests under `tests/` using Playwright Test. Run them with `pnpm e2e`.
 
 Tests must:
 - Assert browser-visible behavior.
@@ -19,6 +21,4 @@ Tests must:
 
 Show proposed assertions to product for approval. Do not change approved expected behavior. Do not weaken assertions to obtain a passing result.
 
-Run tests with `pnpm e2e` (or `pnpm exec playwright test`) against a fresh environment and report failures accurately.
-
-Do not run `pnpm verify` or the trust pipeline in this phase.
+Report failures accurately. Do not run `pnpm verify` or the trust pipeline in this phase.

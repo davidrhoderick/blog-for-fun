@@ -8,7 +8,12 @@
     "servers": {
       "playwright": {
         "type": "local",
-        "command": ["bunx", "@playwright/mcp", "--devtools"]
+        "command": [
+          "pnpm",
+          "dlx",
+          "@playwright/mcp",
+          "--devtools"
+        ]
       }
     }
   }

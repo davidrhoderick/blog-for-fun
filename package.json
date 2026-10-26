@@ -6,7 +6,7 @@
     "codegen": "pnpm --filter server run dev:codegen && pnpm --filter admin run codegen && pnpm --filter blog run codegen",
     "test": "pnpm -r --workspace-concurrency=1 run test",
     "test:coverage": "pnpm -r --workspace-concurrency=1 run test:coverage",
-    "product": "OPENCODE_CONFIG_DIR=\"$PWD/.opencode-product\" headroom wrap opencode",
+    "product": "headroom wrap opencode -- mini --agent product-dev",
     "e2e": "playwright test"
   },
   "devDependencies": {
