@@ -4,6 +4,7 @@ import type { PublicPostIndexQuery } from '~/__generated__/PublicPostIndexQuery.
 import { PostCard } from '~/components/post-card'
 import { Reveal } from '~/components/reveal'
 import { SiteHeader } from '~/components/site-header'
+import { blogHeaders } from '~/lib/headers'
 import { createPublicRelayEnvironment } from '~/lib/relay'
 import { resolveGraphQLUrl } from '~/lib/relay.server'
 import type { Route } from './+types/home'
@@ -24,10 +25,7 @@ export const loader = async () => {
   return { records: environment.getStore().getSource().toJSON() }
 }
 
-export const headers: Route.HeadersFunction = () => ({
-  'cache-control':
-    'public, max-age=60, s-maxage=300, stale-while-revalidate=86400',
-})
+export const headers = blogHeaders()
 
 export const meta: Route.MetaFunction = () => [
   { title: 'Field Notes | Observations worth keeping' },
