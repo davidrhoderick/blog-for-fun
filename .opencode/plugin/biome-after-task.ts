@@ -6,6 +6,13 @@ import {
   type RetryOption,
   retryChoices,
 } from '../../trust-pipeline/engine/retry'
+import {
+  decideStartup,
+  type StartupStatus,
+  skipsTrustPipeline,
+  startupBanner,
+  statusAfterDoctor,
+} from '../../trust-pipeline/engine/startup'
 
 const execFileAsync = promisify(execFile)
 
@@ -30,9 +37,9 @@ const getWorktreeStatus = async (directory: string) => {
   }
 }
 
-const runVerify = async (directory: string) => {
+const runCommand = async (args: string[], directory: string) => {
   try {
-    const { stdout, stderr } = await execFileAsync('pnpm', ['verify'], {
+    const { stdout, stderr } = await execFileAsync('pnpm', args, {
       cwd: directory,
       maxBuffer: 32 * 1024 * 1024,
     })
@@ -43,7 +50,45 @@ const runVerify = async (directory: string) => {
   }
 }
 
+/** Full pipeline: after a task, and only then. */
+const runVerify = (directory: string) => runCommand(['verify'], directory)
+
+/** Fast preflight: tools and credentials this machine needs to run verify. */
+const runDoctor = (directory: string) =>
+  runCommand(['pipeline:doctor'], directory)
+
 const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
+const startupKey = (sessionID: string) => `pipeline-startup:${sessionID}`
+
+type StartupState = { status: StartupStatus; output?: string }
+
+const loadStartupState = async (
+  ctx: Plugin.Context,
+  sessionID: string,
+): Promise<StartupState | undefined> =>
+  (await ctx.storage.get(startupKey(sessionID))) as StartupState | undefined
+
+const saveStartupState = (
+  ctx: Plugin.Context,
+  sessionID: string,
+  state: StartupState,
+) => ctx.storage.set(startupKey(sessionID), state)
+
+// Product phase: no trust pipeline. Skip for the product-dev agent (and an
+// explicit opt-out env var). See docs/verification-first/.
+async function sessionSkipsPipeline(
+  ctx: Plugin.Context,
+  sessionID: string,
+): Promise<boolean> {
+  if (process.env.OPENCODE_PRODUCT_MODE === '1') return true
+  try {
+    const session = await ctx.session.get({ sessionID })
+    return skipsTrustPipeline(process.env, session?.agent)
+  } catch {
+    // Fall through to the normal gate if the session cannot be read.
+    return false
+  }
+}
 
 const loadState = async (
   ctx: Plugin.Context,
@@ -138,6 +183,52 @@ const applyAnswer = async (
   })
 }
 
+/**
+ * Startup admission: the doctor runs once per session. A green result admits
+ * every later prompt without rechecking; a red one splices a banner onto each
+ * prompt until `/pipeline-repair` fixes it. Never re-runs the doctor per prompt.
+ */
+async function handlePrompt(
+  ctx: Plugin.Context,
+  event: { sessionID: string; prompt: { text: string } },
+  directory: string,
+): Promise<void> {
+  if (await sessionSkipsPipeline(ctx, event.sessionID)) return
+
+  const startup = await loadStartupState(ctx, event.sessionID)
+  const decision = decideStartup(startup?.status)
+
+  if (decision.kind === 'blocked') {
+    event.prompt.text = `${startupBanner(startup?.output ?? '')}\n\n${event.prompt.text}`
+    return
+  }
+  if (decision.kind === 'doctor') {
+    const result = await runDoctor(directory)
+    const next = statusAfterDoctor(result.ok, result.output)
+    await saveStartupState(ctx, event.sessionID, next)
+    if (next.status === 'blocked') {
+      event.prompt.text = `${startupBanner(result.output)}\n\n${event.prompt.text}`
+    }
+  }
+}
+
+/** Runs the doctor and reports back, so a fixed machine unlocks the session. */
+async function repairStartup(
+  ctx: Plugin.Context,
+  sessionID: string,
+  directory: string,
+): Promise<void> {
+  const result = await runDoctor(directory)
+  const next = statusAfterDoctor(result.ok, result.output)
+  await saveStartupState(ctx, sessionID, next)
+  await ctx.session.synthetic({
+    sessionID,
+    text: result.ok
+      ? 'Startup check passed. Please resend the development task that was blocked.'
+      : `Startup check still failing:\n\n${result.output.slice(-2000).trim()}`,
+  })
+}
+
 export default {
   id: 'pipeline-after-task',
   async setup(ctx: Plugin.Context) {
@@ -146,7 +237,17 @@ export default {
     const worktreeStatusBySession = new Map<string, string | null>()
     const controller = new AbortController()
 
+    await ctx.command.transform((editor) => {
+      editor.add({
+        name: 'pipeline-repair',
+        description: 'Recheck this machine with doctor and unlock development',
+        execute: async ({ sessionID }) =>
+          repairStartup(ctx, sessionID, directory),
+      })
+    })
+
     await ctx.session.hook('prompt', async (event) => {
+      await handlePrompt(ctx, event, directory)
       worktreeStatusBySession.set(
         event.sessionID,
         await getWorktreeStatus(directory),

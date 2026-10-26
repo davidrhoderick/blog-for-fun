@@ -2,6 +2,7 @@
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee",
   "scripts": {
     "verify": "pnpm --filter trust-pipeline run verify",
+    "pipeline:doctor": "pnpm --filter trust-pipeline run doctor",
     "graphql:generate": "pnpm --filter server run dev:codegen",
     "codegen": "pnpm --filter server run dev:codegen && pnpm --filter admin run codegen && pnpm --filter blog run codegen",
     "test": "pnpm -r --workspace-concurrency=1 run test",
