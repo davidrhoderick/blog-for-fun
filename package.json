@@ -16,6 +16,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "pm2": "^7.0.4"
+    "pm2": "^7.1.1"
   }
 }

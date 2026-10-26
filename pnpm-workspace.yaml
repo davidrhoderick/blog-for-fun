@@ -2,9 +2,6 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'trust-pipeline'
-auditConfig:
-  ignoreGhsas:
-    - GHSA-vfj7-8cjw-p6xm
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
@@ -12,7 +9,7 @@ minimumReleaseAgeExclude:
   - '@mdxeditor/editor@4.3.0'
   - nanoid@3.3.18
   - qs@6.15.4 || 6.16.0
-  - fast-uri@3.1.6 || 3.1.7 || 3.1.8
+  - fast-uri@3.1.6 || 3.1.7 || 3.1.8 || 3.1.9
   - js-yaml@4.3.2
   - hono@4.13.5 || 4.13.7
   - morgan@1.12.0 || 1.12.1
@@ -22,7 +19,6 @@ minimumReleaseAgeExclude:
   - basic-ftp@6.2.1
   - '@fastify/busboy@3.2.1 || 3.2.2'
   - braces@3.0.4
-  - sprintf-js@1.1.4
   - source-map-js@1.2.2
   - proxy-addr@2.0.8
   - compression@1.8.2
@@ -38,6 +34,8 @@ overrides:
   '@graphql-tools/executor-legacy-ws@<=1.1.34': ^1.1.35
   '@graphql-tools/utils@<=12.0.0': ^12.0.1
   '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': ^1.31.0
+  'body-parser@>=2.0.0 <2.4.0': ^2.4.0
+  'fast-uri@>=3.0.0 <3.1.9': ^3.1.9
   basic-ftp@<=6.2.0: ^6.2.1
   brace-expansion@>=2.0.0 <2.1.5: ^2.1.5
   brace-expansion@>=2.0.0 <2.1.6: ^2.1.6
@@ -51,6 +49,9 @@ overrides:
   fast-uri@>=3.0.0 <3.1.8: ^3.1.8
   fast-uri@>=3.1.2 <3.1.6: ^3.1.6
   fast-uri@>=3.1.3 <3.1.6: ^3.1.6
+  'follow-redirects@>=1.16.0 <1.16.1': ^1.16.1
+  # ponytail: SQL Server peer is unused; revisit if this repo adopts MSSQL.
+  '@azure/identity>@azure/msal-node': ^7.1.1
   hono@<4.13.5: ^4.13.5
   hono@<4.13.7: ^4.13.7
   ip-address@<=10.5.0: ^10.5.1
@@ -66,9 +67,13 @@ overrides:
   qs@>=6.14.2 <=6.15.3: ^6.15.4
   shell-quote@>=1.8.4 <1.11.0: ^1.11.0
   source-map-js@>=1.0.0 <1.2.2: ^1.2.2
+  'undici@': 7.30.1
+  'undici@>=8.0.0 <8.12.2': ^8.12.2
+  'vite@>=8.2.0 <=8.2.3': ^8.2.4
   undici@>=7.0.0 <7.29.1: ^7.29.1
   undici@>=7.1.0 <7.29.1: ^7.29.1
   undici@>=7.11.0 <7.29.1: ^7.29.1
   undici@>=7.15.0 <7.29.1: ^7.29.1
   undici@>=7.24.1 <7.29.1: ^7.29.1
   undici@>=7.28.0 <7.29.1: ^7.29.1
+  'zod@': 4.6.6
