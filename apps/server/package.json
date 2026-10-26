@@ -18,6 +18,7 @@
     "db:check": "drizzle-kit check --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "auth:bootstrap": "tsx src/scripts/bootstrap-auth.ts",
+    "auth:recover": "tsx src/scripts/recover-password.ts",
     "storage:dev": "docker run --rm -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=test -e MINIO_ROOT_PASSWORD=testtest -v \"$PWD/.local/media:/data\" minio/minio server /data --console-address :9001",
     "storage:configure-cors": "tsx src/scripts/configure-media-cors.ts"
   },

@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { and, eq } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 
@@ -10,9 +11,16 @@ process.env.TURSO_CONNECTION_URL = `file:${join(tempDirectory, 'test.db')}`
 process.env.TURSO_AUTH_TOKEN = 'test-token'
 
 const { db } = await import('../db')
-const { authPasswordCredentials, authSessions, authUsers, users } =
-  await import('../db/schema')
-const { bootstrapAdministrator } = await import('./account')
+const {
+  authAuditEvents,
+  authPasswordCredentials,
+  authSessions,
+  authUsers,
+  users,
+} = await import('../db/schema')
+const { bootstrapAdministrator, recoverAdministratorPassword } = await import(
+  './account'
+)
 const { SESSION_COOKIE_NAME } = await import('./cookie')
 const {
   SESSION_IDLE_DURATION_MS,
@@ -457,4 +465,96 @@ test('sessions renew inside the renewal window and can be revoked together', {
       where: { authUserId: administratorUser.id },
     }),
   ).toBeUndefined()
+})
+
+test('recovering a password replaces the credential, revokes sessions, and audits it', {
+  tags: ['integration'],
+}, async () => {
+  const [credential] = await db
+    .select({ authUserId: authPasswordCredentials.authUserId })
+    .from(authPasswordCredentials)
+    .where(eq(authPasswordCredentials.email, administrator.email))
+  const priorSession = await createSession(credential.authUserId)
+  const newPassword = 'a replacement long password'
+
+  const authUserId = await recoverAdministratorPassword(
+    administrator.email,
+    newPassword,
+  )
+  expect(authUserId).toBe(credential.authUserId)
+
+  const newLogin = await responseJson(
+    await graphql(
+      `mutation Login($input: LoginInput!) {
+          login(input: $input) { email }
+        }`,
+      { input: { email: administrator.email, password: newPassword } },
+    ),
+  )
+  expect(newLogin.data?.login).toEqual({ email: administrator.email })
+
+  const oldLogin = await responseJson(
+    await graphql(
+      `mutation Login($input: LoginInput!) {
+          login(input: $input) { email }
+        }`,
+      {
+        input: {
+          email: administrator.email,
+          password: administrator.password,
+        },
+      },
+    ),
+  )
+  expect(oldLogin.errors?.[0]?.message).toBe('Invalid email or password')
+
+  const survivor = await db
+    .select()
+    .from(authSessions)
+    .where(eq(authSessions.id, hashSessionToken(priorSession.token)))
+  expect(survivor).toEqual([])
+
+  const auditEvents = await db
+    .select()
+    .from(authAuditEvents)
+    .where(
+      and(
+        eq(authAuditEvents.subjectAuthUserId, credential.authUserId),
+        eq(authAuditEvents.eventType, 'administrator.password.recovered'),
+      ),
+    )
+  expect(auditEvents).toHaveLength(1)
+})
+
+test('recovery refuses an unknown email address', {
+  tags: ['integration'],
+}, async () => {
+  await expect(
+    recoverAdministratorPassword(
+      'missing@example.com',
+      'a replacement long password',
+    ),
+  ).rejects.toThrow('No account exists with that email address')
+})
+
+test('recovery refuses a disabled account', {
+  tags: ['integration'],
+}, async () => {
+  const disabledUserId = crypto.randomUUID()
+  await db.insert(authUsers).values({ id: disabledUserId, status: 'disabled' })
+  await db
+    .insert(users)
+    .values({ id: disabledUserId, displayName: 'Disabled recovery' })
+  await db.insert(authPasswordCredentials).values({
+    authUserId: disabledUserId,
+    email: 'recovery-disabled@example.com',
+    passwordHash: await hashPassword('disabled long test password'),
+  })
+
+  await expect(
+    recoverAdministratorPassword(
+      'recovery-disabled@example.com',
+      'a replacement long password',
+    ),
+  ).rejects.toThrow('That account is disabled; enable it before recovering it')
 })

@@ -34,9 +34,7 @@ export const verifyPassword = async (
   passwordHash: string,
   password: string,
 ) => {
-  if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
-    return false
-  }
+  if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) return false
 
   try {
     return await verify(passwordHash, password)

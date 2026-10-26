@@ -12,9 +12,8 @@ export const meta = () => [{ title: 'Sign in | Blog administration' }]
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { body, setCookie } = await getViewer(request)
-  if (body.data?.viewer) {
+  if (body.data?.viewer)
     return redirect('/', { headers: responseHeaders(setCookie) })
-  }
 
   return data(null, { headers: responseHeaders(setCookie) })
 }
@@ -25,9 +24,8 @@ export async function action({ request }: Route.ActionArgs) {
   const email = formData.get('email')
   const password = formData.get('password')
 
-  if (typeof email !== 'string' || typeof password !== 'string') {
+  if (typeof email !== 'string' || typeof password !== 'string')
     return data({ error: 'Enter your email and password.' }, { status: 400 })
-  }
 
   const { body, setCookie } = await requestGraphQL<{ login: Viewer }>(
     request,

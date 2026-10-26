@@ -143,9 +143,8 @@ export function collectSymbols(diff: string, ref = TASK_BASE): Symbol[] {
       ]),
     )
     for (const symbol of symbolsIn(after, file)) {
-      if (!ranges.some(([a, b]) => symbol.start <= b && symbol.end >= a)) {
+      if (!ranges.some(([a, b]) => symbol.start <= b && symbol.end >= a))
         continue
-      }
       symbols.push({
         file,
         name: symbol.name,
@@ -241,9 +240,8 @@ async function askJev(
     },
     body: JSON.stringify({ state, model: MODEL, questions }),
   })
-  if (!response.ok) {
+  if (!response.ok)
     throw new Error(`Jev ${response.status}: ${await response.text()}`)
-  }
   const body = (await response.json()) as {
     answers: Record<string, ChoiceAnswer>
   }
@@ -346,14 +344,11 @@ export const reviewStage: Stage = {
 
 async function runReview(): Promise<StageResult> {
   const diff = await collectDiff(TASK_BASE)
-  if (!diff.trim()) {
-    return { name: 'review', ok: true, output: 'no changes' }
-  }
+  if (!diff.trim()) return { name: 'review', ok: true, output: 'no changes' }
   const rubric = parseRubric(readFileSync(RUBRIC, 'utf8'))
   const symbols = collectSymbols(diff, TASK_BASE)
-  if (symbols.length === 0) {
+  if (symbols.length === 0)
     return { name: 'review', ok: true, output: 'no changed symbols' }
-  }
   const reviewed = await reviewSymbols(symbols, rubric)
   const entries: { label: string; answer: RubricAnswer }[] = []
   for (const [symbol, answers] of reviewed) {

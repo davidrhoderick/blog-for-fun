@@ -73,9 +73,7 @@ export const validateSessionToken = async (
     .where(eq(authSessions.id, sessionId))
     .limit(1)
 
-  if (!row) {
-    return invalidSession()
-  }
+  if (!row) return invalidSession()
 
   if (
     row.status !== 'active' ||

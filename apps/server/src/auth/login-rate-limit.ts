@@ -30,9 +30,7 @@ export const assertLoginAllowed = (email: string, now = Date.now()) => {
     attemptsByIdentity.get(key) ?? { startedAt: now, attempts: 0 },
     now,
   )
-  if (identityAttempts.attempts >= MAX_IDENTITY_ATTEMPTS) {
-    throw rateLimitError()
-  }
+  if (identityAttempts.attempts >= MAX_IDENTITY_ATTEMPTS) throw rateLimitError()
 }
 
 export const recordLoginFailure = (email: string, now = Date.now()) => {
@@ -51,9 +49,8 @@ export const recordLoginFailure = (email: string, now = Date.now()) => {
 }
 
 export const acquirePasswordCheck = () => {
-  if (activePasswordChecks >= MAX_CONCURRENT_PASSWORD_CHECKS) {
+  if (activePasswordChecks >= MAX_CONCURRENT_PASSWORD_CHECKS)
     throw rateLimitError()
-  }
 
   activePasswordChecks += 1
   let released = false

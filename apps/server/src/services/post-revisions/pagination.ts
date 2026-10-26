@@ -53,11 +53,9 @@ export const decodeRevisionCursor = (cursor: string, postId: string) => {
 
 export const getRevisionPageSize = (first: number | null | undefined) => {
   const pageSize = first ?? DEFAULT_PAGE_SIZE
-  if (!Number.isInteger(pageSize) || pageSize < 0) {
+  if (!Number.isInteger(pageSize) || pageSize < 0)
     throw new GraphQLError('first must be a non-negative integer')
-  }
-  if (pageSize > MAX_PAGE_SIZE) {
+  if (pageSize > MAX_PAGE_SIZE)
     throw new GraphQLError(`first cannot exceed ${MAX_PAGE_SIZE}`)
-  }
   return pageSize
 }

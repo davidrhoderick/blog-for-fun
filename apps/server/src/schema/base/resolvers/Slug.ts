@@ -3,9 +3,7 @@ import { GraphQLError, GraphQLScalarType, Kind } from 'graphql'
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const parseSlug = (value: unknown) => {
-  if (typeof value !== 'string') {
-    throw new GraphQLError('Slug must be a string')
-  }
+  if (typeof value !== 'string') throw new GraphQLError('Slug must be a string')
 
   const normalizedValue = value.trim().toLowerCase()
   if (!slugPattern.test(normalizedValue)) {
@@ -24,9 +22,8 @@ export const Slug = new GraphQLScalarType({
   serialize: parseSlug,
   parseValue: parseSlug,
   parseLiteral: (ast) => {
-    if (ast.kind !== Kind.STRING) {
+    if (ast.kind !== Kind.STRING)
       throw new GraphQLError('Slug must be a string')
-    }
 
     return parseSlug(ast.value)
   },

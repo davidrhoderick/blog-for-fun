@@ -52,9 +52,8 @@ function aliasedRouteExport(node: ts.Node): string | undefined {
     )
     return name?.name.text
   }
-  if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) {
+  if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression))
     return 'default'
-  }
   if (!ts.isVariableStatement(node)) return undefined
   const exported = ts
     .getModifiers(node)
