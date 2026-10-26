@@ -4,6 +4,7 @@ import { fetchQuery } from 'relay-runtime'
 import type { PublicPostQuery } from '~/__generated__/PublicPostQuery.graphql'
 import { Article } from '~/components/article'
 import { SiteHeader } from '~/components/site-header'
+import { blogHeaders } from '~/lib/headers'
 import { createPublicRelayEnvironment } from '~/lib/relay'
 import { resolveGraphQLUrl } from '~/lib/relay.server'
 import type { Route } from './+types/post'
@@ -46,9 +47,7 @@ export const loader = async ({ params }: Route.LoaderArgs) => {
   }
 }
 
-export const headers: Route.HeadersFunction = () => ({
-  'cache-control': 'public, max-age=60, s-maxage=300',
-})
+export const headers = blogHeaders()
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   if (!loaderData?.meta) return [{ title: 'Note not found | Field Notes' }]

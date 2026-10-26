@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { RelayScope } from '~/components/relay-scope'
 import type { Route } from './+types/home'
-import Home, { headers, loader, meta } from './home'
+import Home, { loader, meta } from './home'
 
 const posts = [
   {
@@ -61,12 +61,9 @@ test('renders the dispatches returned by the public GraphQL API', {
   expect(screen.getByText('Jan 2, 2026')).toBeTruthy()
 })
 
-test('caches the index and describes it for search engines', {
+test('describes the index for search engines', {
   tags: ['unit'],
 }, () => {
-  expect(headers({} as Route.HeadersArgs)).toEqual({
-    'cache-control': 'public, max-age=60, s-maxage=300',
-  })
   expect(meta({} as Route.MetaArgs)).toEqual([
     { title: 'Field Notes | Observations worth keeping' },
     {
