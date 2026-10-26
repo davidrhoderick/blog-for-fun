@@ -1,11 +1,3 @@
-import {
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  PutBucketCorsCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { desc, eq } from 'drizzle-orm'
 import { GraphQLError } from 'graphql'
 import { db } from '../../db'
@@ -28,11 +20,16 @@ const requiredStorageEnv = (name: string) => {
   return value
 }
 
-const storage = () => {
+// Loaded on first media use so the public/blog path never pays for the SDK.
+const loadStorage = async () => {
+  const [s3, presigner] = await Promise.all([
+    import('@aws-sdk/client-s3'),
+    import('@aws-sdk/s3-request-presigner'),
+  ])
   const endpoint = requiredStorageEnv('AWS_ENDPOINT_URL_S3')
   return {
     bucket: requiredStorageEnv('BUCKET_NAME'),
-    client: new S3Client({
+    client: new s3.S3Client({
       endpoint,
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
       region: process.env.AWS_REGION ?? 'auto',
@@ -41,6 +38,8 @@ const storage = () => {
         secretAccessKey: requiredStorageEnv('AWS_SECRET_ACCESS_KEY'),
       },
     }),
+    presigner,
+    s3,
   }
 }
 
@@ -95,10 +94,10 @@ export const prepareMediaUpload = async (input: {
 
   const id = crypto.randomUUID()
   const objectKey = `media/${id}/${filename}`
-  const { bucket, client } = storage()
-  const uploadUrl = await getSignedUrl(
+  const { bucket, client, presigner, s3 } = await loadStorage()
+  const uploadUrl = await presigner.getSignedUrl(
     client,
-    new PutObjectCommand({
+    new s3.PutObjectCommand({
       ...(process.env.MEDIA_OBJECT_ACL
         ? { ACL: process.env.MEDIA_OBJECT_ACL as 'public-read' }
         : {}),
@@ -142,11 +141,11 @@ export const finalizeMediaUpload = async (id: string) => {
   if (!asset) throw new GraphQLError('Media upload not found')
   if (asset.status === 'ready') return toMediaAsset(asset)
 
-  const { bucket, client } = storage()
+  const { bucket, client, s3 } = await loadStorage()
   let object: { ContentLength?: number; ContentType?: string }
   try {
     object = await client.send(
-      new HeadObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
+      new s3.HeadObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
     )
   } catch {
     throw new GraphQLError('Uploaded object could not be verified')
@@ -157,7 +156,7 @@ export const finalizeMediaUpload = async (id: string) => {
     object.ContentType !== asset.contentType
   ) {
     await client.send(
-      new DeleteObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
+      new s3.DeleteObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
     )
     await db.delete(mediaAssets).where(eq(mediaAssets.id, id))
     throw new GraphQLError('Uploaded object does not match its metadata')
@@ -173,9 +172,9 @@ export const finalizeMediaUpload = async (id: string) => {
 }
 
 export const configureMediaCors = async () => {
-  const { bucket, client } = storage()
+  const { bucket, client, s3 } = await loadStorage()
   await client.send(
-    new PutBucketCorsCommand({
+    new s3.PutBucketCorsCommand({
       Bucket: bucket,
       CORSConfiguration: {
         CORSRules: [

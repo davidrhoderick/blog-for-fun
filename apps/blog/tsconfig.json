@@ -17,7 +17,9 @@
       "~/*": ["./app/*"]
     },
     "esModuleInterop": true,
-    "verbatimModuleSyntax": true,
+    // Relay's generated artifacts import types as values, and Vite externalizes
+    // the CommonJS relay-runtime for SSR; see apps/blog/vite.config.ts.
+    "verbatimModuleSyntax": false,
     "noEmit": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,

@@ -8,8 +8,8 @@ module.exports = {
     },
     {
       name: 'graphql',
-      script: './node_modules/.bin/tsx',
-      args: 'src/server.ts',
+      script: process.execPath,
+      args: '--enable-source-maps dist/server.js',
       cwd: '/app/apps/server',
       interpreter: 'none',
       env: {

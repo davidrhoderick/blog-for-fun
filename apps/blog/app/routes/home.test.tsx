@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
+import { RelayScope } from '~/components/relay-scope'
 import type { Route } from './+types/home'
 import Home, { headers, loader, meta } from './home'
 
@@ -14,20 +15,10 @@ const posts = [
   },
 ]
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-  vi.unstubAllEnvs()
-})
-
-test('renders the dispatches returned by the public GraphQL API', {
-  tags: ['integration'],
-}, async () => {
+const stubApi = (data: unknown) => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify({ data: { posts } }), { status: 200 }),
-    ),
+    vi.fn(async () => new Response(JSON.stringify({ data }), { status: 200 })),
   )
   vi.stubGlobal(
     'matchMedia',
@@ -38,18 +29,36 @@ test('renders the dispatches returned by the public GraphQL API', {
       removeEventListener: () => {},
     })),
   )
+}
 
-  const loaderData = await loader()
-  const props = { loaderData } as unknown as Route.ComponentProps
+const renderHome = (records: Awaited<ReturnType<typeof loader>>['records']) =>
   render(
     <MemoryRouter>
-      <Home {...props} />
+      <RelayScope records={records}>
+        <Home />
+      </RelayScope>
     </MemoryRouter>,
   )
 
-  expect(screen.getByRole('heading', { name: 'First note' })).toBeTruthy()
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
+
+test('renders the dispatches returned by the public GraphQL API', {
+  tags: ['integration'],
+}, async () => {
+  stubApi({ publishedPosts: posts })
+
+  const { records } = await loader()
+  renderHome(records)
+
+  expect(
+    await screen.findByRole('heading', { name: 'First note' }),
+  ).toBeTruthy()
   expect(screen.getByText('1 entries')).toBeTruthy()
   expect(screen.getByText('Something worth saying more...')).toBeTruthy()
+  expect(screen.getByText('Jan 2, 2026')).toBeTruthy()
 })
 
 test('caches the index and describes it for search engines', {

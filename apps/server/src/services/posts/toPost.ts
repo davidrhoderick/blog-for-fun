@@ -1,5 +1,5 @@
 import type { posts } from '../../db/schema'
-import type { Post } from '../../schema/types.generated'
+import type { Post, PublishedPost } from '../../schema/types.generated'
 
 export const toPost = (post: typeof posts.$inferSelect): Post => ({
   id: post.id,
@@ -20,3 +20,17 @@ export const toPost = (post: typeof posts.$inferSelect): Post => ({
     },
   },
 })
+
+export const toPublishedPost = (post: Post): PublishedPost => {
+  if (!post.publishedAt) {
+    throw new Error(`Published post ${post.id} has no publishedAt`)
+  }
+
+  return {
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    markdownContent: post.markdownContent,
+    publishedAt: post.publishedAt,
+  }
+}
