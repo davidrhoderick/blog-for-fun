@@ -31,14 +31,14 @@ It does not cover integration-test generation, architectural refactoring, engine
 | Component | Tool in this repo | Purpose |
 | --- | --- | --- |
 | Runtime | Node.js, TypeScript, pnpm | Application services and orchestration |
-| Coding agent | OpenCode with `.opencode/agents/product-dev.md` | Read, write, and execute application code |
+| Coding agent | OpenCode 2.1.4 with `.opencode/agents/product-dev.md` | Read, write, and execute application code |
 | Ticket system | GitHub Issues (or a local markdown ticket) | Store feature requirements |
 | Source control | Git, OpenCode worktrees | Isolate feature changes |
 | Browser interaction | Playwright MCP (`@playwright/mcp`, devtools) | Let agents inspect and operate the application |
 | E2E recording | Playwright MCP or Playwright codegen | Record user interactions |
 | Test runner | Playwright Test | Run executable acceptance tests |
 | Workflow state | OpenCode session + feature manifest in Git | Preserve workflow state |
-| Artifact storage | Git and `docs/verification-first/artifacts/` | Preserve tests and execution evidence |
+| Artifact storage | Git for manifests/tests; `.artifacts/features/<ID>/` (gitignored) for large output | Preserve tests and execution evidence without committing large files |
 
 Use the existing application framework, database, and migration tools.
 
@@ -56,7 +56,7 @@ Do not introduce a new coding agent or test framework when an existing tool meet
     "servers": {
       "playwright": {
         "type": "local",
-        "command": ["pnpm", "dlx", "@playwright/mcp", "--devtools"]
+        "command": ["pnpm", "dlx", "@playwright/mcp", "--caps", "devtools"]
       }
     }
   }
@@ -146,7 +146,7 @@ When product selects **Accept Feature**:
 
 - Save the current implementation to a Git commit on a new branch off `main` (stacking only if explicitly requested).
 - Record the accepted revision (commit SHA).
-- Write a feature manifest (for example `docs/features/<ticket>.md`) with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred).
+- Write a feature manifest at `docs/features/<ticket>/feature.yaml` with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred). Use the schema and fields in the [engineering workflow specification](./engineering-agent-and-trust-pipeline-acceptance.md).
 - Record the feature requirements and environment configuration.
 - Prevent later changes to the accepted implementation without a new revision.
 
@@ -327,15 +327,17 @@ Each accepted feature must produce:
 | --- | --- |
 | Feature manifest | Ticket ID, requirements, user scope, flag ID |
 | Accepted revision | Git commit SHA |
-| E2E test files | Approved Playwright Test cases (e.g. `e2e/<feature>.spec.ts`) |
+| E2E test files | Approved Playwright Test cases (e.g. `tests/<feature>.spec.ts`) |
 | Fixture reference | Seed version and test-user configuration |
-| Environment manifest | Application configuration and container/image versions |
+| Environment manifest | Host-process startup, ports, local libSQL profile, and bootstrap users |
 | Verification report | Test results, failures, execution time |
 | Acceptance record | Product approval and test-baseline version |
 
 Store executable tests in Git.
 
-Store large traces, screenshots, and videos as referenced artifacts.
+Store large traces, screenshots, and videos under
+`.artifacts/features/<ID>/` (gitignored) or CI artifact storage, never in Git.
+Commit only small, redacted fixture recordings.
 
 The next phase receives the accepted revision and test baseline. It must not change the accepted assertions without product approval.
 

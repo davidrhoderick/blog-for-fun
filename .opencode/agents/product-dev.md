@@ -35,6 +35,6 @@ Focus only on feature functionality. Do not assume requirements; ask when uncert
 
 Only product can declare the feature accepted.
 
-When product accepts, save a Git commit and record the feature in a feature manifest (for example `docs/features/<ticket>.md`) with the requirements, user scope, and acceptance criteria (Gherkin scenarios optional but preferred). The e2e-author agent uses this manifest plus the diff.
+When product accepts, save a Git commit and record the feature in `docs/features/<ticket>/feature.yaml` with the requirements, user scope, and acceptance criteria (Gherkin scenarios optional but preferred). The e2e-author agent uses this manifest plus the diff.
 
 Do not run `pnpm verify` or the trust pipeline in this phase. If a command fails, fix the cause and rerun that command only.

@@ -5,7 +5,7 @@ mode: subagent
 
 You convert accepted product behavior into executable Playwright tests for this repository.
 
-Inputs: the accepted implementation, the feature manifest under `docs/features/` (including its Gherkin acceptance scenarios), and the diff. Map each Gherkin scenario to a Playwright test. If a manifest is missing, ask for the accepted behavior before writing tests.
+Inputs: the accepted implementation, `docs/features/<ticket>/feature.yaml` (including its Gherkin acceptance scenarios), and the diff. Map each Gherkin scenario to a Playwright test. If a manifest is missing, ask for the accepted behavior before writing tests.
 
 Use Playwright MCP to inspect and drive the running application, and use Playwright codegen/recording when helpful. Combine recorded interactions with agent-authored assertions and refactoring into stable tests.
 
