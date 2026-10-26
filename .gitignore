@@ -15,3 +15,6 @@ report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Feature workflow raw artifacts
+/.artifacts/
