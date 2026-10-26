@@ -1,85 +1,34 @@
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import type { Plugin } from '@opencode/plugin'
 import {
+  retryChoices as engineRetryChoices,
   matchRetryAnswer,
   type RetryOption,
-  retryChoices,
 } from '../../trust-pipeline/engine/retry'
 import {
-  shouldVerifyAfterTask,
-  startupPromptAction,
+  decideStartup,
+  type StartupStatus,
+  statusAfterVerify,
 } from '../../trust-pipeline/engine/startup'
 
 const execFileAsync = promisify(execFile)
 
 const AUTOMATIC_ATTEMPTS = 3
 
-// The option list the plugin offered, stored alongside the session state so an
-// answer is matched against what was actually asked, never re-derived.
 type RetryState = {
   spent: number
   remaining: number
-  options: RetryOption[]
+  options: Array<{ label: string; attempts: number | null }>
 }
 
-type StartupState =
-  | { status: 'ready' }
-  | { status: 'blocked'; output: string }
-  | { status: 'repairing'; output: string; repairToken: string }
-
-const getWorktreeStatus = async (directory: string) => {
-  try {
-    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
-      cwd: directory,
-    })
-    return stdout
-  } catch {
-    return null
-  }
-}
-
-const runVerify = async (directory: string) => {
-  try {
-    const { stdout, stderr } = await execFileAsync('pnpm', ['verify'], {
-      cwd: directory,
-      maxBuffer: 32 * 1024 * 1024,
-    })
-    return { ok: true, output: `${stdout}${stderr}` }
-  } catch (error) {
-    const failed = error as { stdout?: string; stderr?: string }
-    return { ok: false, output: `${failed.stdout ?? ''}${failed.stderr ?? ''}` }
-  }
+type StartupState = {
+  status: StartupStatus
+  output?: string
 }
 
 const stateKey = (sessionID: string) => `pipeline-retry:${sessionID}`
 const startupKey = (sessionID: string) => `pipeline-startup:${sessionID}`
-
-const loadStartupState = async (
-  ctx: Plugin.Context,
-  sessionID: string,
-): Promise<StartupState | undefined> =>
-  (await ctx.storage.get(startupKey(sessionID))) as StartupState | undefined
-
-const saveStartupState = (
-  ctx: Plugin.Context,
-  sessionID: string,
-  state: StartupState,
-) => ctx.storage.set(startupKey(sessionID), state)
-
-const startupFailure = (output: string) =>
-  new Error(
-    `Startup \`pnpm verify\` failed; this prompt was not admitted. ` +
-      'Run /pipeline-repair to fix the blockers, then resend your task.\n\n' +
-      output.slice(-2000).trim(),
-  )
-
-const repairInstructions = (output: string) =>
-  'Repair only the startup verification failures below. Do not work on other tasks, ' +
-  'suppress findings, add ignores, or weaken checks. Once fixed, stop; verification ' +
-  'will run automatically.\n\n' +
-  output.slice(-2000).trim()
 
 const loadState = async (
   ctx: Plugin.Context,
@@ -94,29 +43,81 @@ const loadState = async (
 const saveState = (ctx: Plugin.Context, sessionID: string, state: RetryState) =>
   ctx.storage.set(stateKey(sessionID), state)
 
-// Runs the pipeline after a task. Green resets the session; red spends one
-// automatic attempt, and once none remain the agent is told to ask the user.
-const gateSession = async (
+const loadStartupState = async (
   ctx: Plugin.Context,
   sessionID: string,
-  previousStatus: string | null,
-  currentStatus: string | null,
-): Promise<void> => {
-  const startup = await loadStartupState(ctx, sessionID)
+): Promise<StartupState | undefined> =>
+  (await ctx.storage.get(startupKey(sessionID))) as StartupState | undefined
+
+const saveStartupState = (
+  ctx: Plugin.Context,
+  sessionID: string,
+  state: StartupState,
+) => ctx.storage.set(startupKey(sessionID), state)
+
+const runVerify = async (directory: string) => {
+  try {
+    const { stdout, stderr } = await execFileAsync('pnpm', ['verify'], {
+      cwd: directory,
+      maxBuffer: 32 * 1024 * 1024,
+    })
+    return { ok: true, output: `${stdout}${stderr}` }
+  } catch (error) {
+    const failed = error as { stdout?: string; stderr?: string }
+    return { ok: false, output: `${failed.stdout ?? ''}${failed.stderr ?? ''}` }
+  }
+}
+
+const getWorktreeStatus = async (directory: string) => {
+  try {
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
+      cwd: directory,
+    })
+    return stdout
+  } catch {
+    return null
+  }
+}
+
+const startupBanner = (output: string) =>
+  '⛔ STARTUP VERIFICATION FAILED ⛔\n\n' +
+  'Do NOT proceed with any development work. The local trust pipeline is red.\n' +
+  'Fix the issues below, then run /pipeline-repair to recheck.\n\n' +
+  output.slice(-2000).trim()
+
+const repairInstructions = (output: string) =>
+  'Repair only the startup verification failures below. Do not work on other tasks, ' +
+  'suppress findings, add ignores, or weaken checks. Once fixed, stop; verification ' +
+  'will run automatically.\n\n' +
+  output.slice(-2000).trim()
+
+const retryChoices = (spent: number) =>
+  engineRetryChoices(spent) as RetryOption[]
+
+async function handleIdleSession(
+  ctx: Plugin.Context,
+  sessionID: string,
+  directory: string,
+  worktreeStatusBySession: Map<string, string | null>,
+  _pendingSessions: Set<string>,
+): Promise<void> {
+  const previousStatus = worktreeStatusBySession.get(sessionID)
+  worktreeStatusBySession.delete(sessionID)
+  const currentStatus = await getWorktreeStatus(directory)
+
   if (
-    !shouldVerifyAfterTask(
-      previousStatus,
-      currentStatus,
-      startup?.status === 'repairing',
-    )
+    previousStatus !== null &&
+    currentStatus !== null &&
+    previousStatus === currentStatus
   ) {
     return
   }
 
-  const { ok, output } = await runVerify(ctx.location.directory)
+  const { ok, output } = await runVerify(directory)
   if (ok) {
     await ctx.storage.remove(stateKey(sessionID))
-    if (startup?.status === 'repairing') {
+    const startup = await loadStartupState(ctx, sessionID)
+    if (startup?.status === 'blocked') {
       await saveStartupState(ctx, sessionID, { status: 'ready' })
       await ctx.session.synthetic({
         sessionID,
@@ -128,80 +129,80 @@ const gateSession = async (
 
   const state = await loadState(ctx, sessionID)
   const remaining = Math.max(state.remaining - 1, 0)
-  const options: RetryOption[] = remaining > 0 ? [] : retryChoices(state.spent)
+  const options = remaining > 0 ? [] : retryChoices(state.spent)
   await saveState(ctx, sessionID, { spent: state.spent, remaining, options })
+
   await ctx.session.prompt({
     sessionID,
     text:
       remaining > 0
         ? `\`pnpm verify\` failed. Fix the reported failures intentionally — no suppressions, ignores, or weaker configuration. Do not run the pipeline yourself; it runs again automatically when you stop. ${remaining} automatic attempt${remaining === 1 ? '' : 's'} remain before you must ask the user.\n\n${output.slice(-2000).trim()}`
         : `\`pnpm verify\` is still failing and the automatic retry budget is exhausted. Stop working now and ask the user what to do next with the \`question\` tool, offering exactly these options in this order: ${options.map((option) => `"${option.label}"`).join(', ')}. Do not run the pipeline yourself.`,
-    ...(startup?.status === 'repairing'
-      ? { metadata: { trustPipelineRepair: startup.repairToken } }
-      : {}),
   })
 }
 
-async function repairStartup(
+async function handlePrompt(
   ctx: Plugin.Context,
-  sessionID: string,
+  event: { sessionID: string; prompt: { text: string } },
+  directory: string,
+  worktreeStatusBySession: Map<string, string | null>,
+  pendingSessions: Set<string>,
+): Promise<void> {
+  const startup = await loadStartupState(ctx, event.sessionID)
+  const decision = decideStartup(startup?.status)
+
+  if (decision.kind === 'admit') {
+    worktreeStatusBySession.set(
+      event.sessionID,
+      await getWorktreeStatus(directory),
+    )
+    pendingSessions.add(event.sessionID)
+    return
+  }
+
+  // decision.kind is 'verify' (unchecked) or 'block' (already blocked): run
+  // verify again so a fixed `.env` or lockfile unlocks without a manual reset.
+  const result = await runVerify(directory)
+  const next = statusAfterVerify(result.ok, result.output)
+  await saveStartupState(ctx, event.sessionID, next)
+
+  if (next.status === 'ready') {
+    worktreeStatusBySession.set(
+      event.sessionID,
+      await getWorktreeStatus(directory),
+    )
+    pendingSessions.add(event.sessionID)
+    return
+  }
+
+  event.prompt.text = `${startupBanner(result.output)}\n\n${event.prompt.text}`
+}
+
+async function registerRepairCommand(
+  ctx: Plugin.Context,
   directory: string,
 ): Promise<void> {
-  const { ok, output } = await runVerify(directory)
-  if (ok) {
-    await saveStartupState(ctx, sessionID, { status: 'ready' })
-    await ctx.session.synthetic({
-      sessionID,
-      text: 'Startup verification passed. Please resend your development task.',
+  await ctx.command.transform((editor) => {
+    editor.add({
+      name: 'pipeline-repair',
+      description: 'Repair startup verification blockers before development',
+      execute: async ({ sessionID }) => {
+        const { ok, output } = await runVerify(directory)
+        const next = statusAfterVerify(ok, output)
+        await saveStartupState(ctx, sessionID, next)
+        if (next.status === 'ready') {
+          await ctx.session.synthetic({
+            sessionID,
+            text: 'Startup verification passed. Please resend your development task.',
+          })
+          return
+        }
+        await ctx.session.prompt({
+          sessionID,
+          text: repairInstructions(output),
+        })
+      },
     })
-    return
-  }
-
-  const repairToken = randomUUID()
-  await saveStartupState(ctx, sessionID, {
-    status: 'repairing',
-    output,
-    repairToken,
-  })
-  await ctx.session.prompt({
-    sessionID,
-    text: repairInstructions(output),
-    metadata: { trustPipelineRepair: repairToken },
-  })
-}
-
-// The plugin cannot call the `question` tool, so it watches the answer the
-// agent collects and matches it (trimmed, exact) against the option list it
-// stored when it asked: a granted budget advances the ladder, other
-// instructions do not, and an unmatched answer is a no-op.
-// shortcut: assumes the question tool's result metadata carries `answers` as
-// string[][]; if that shape changes the ladder stops shrinking (the gate still
-// blocks). Upgrade by subscribing to the question.replied event instead.
-const applyAnswer = async (
-  ctx: Plugin.Context,
-  sessionID: string,
-  metadata: unknown,
-): Promise<void> => {
-  const state = await loadState(ctx, sessionID)
-  if (state.remaining > 0) return
-
-  const answers = (metadata as { answers?: unknown } | undefined)?.answers
-  const [first] = Array.isArray(answers) ? answers : []
-  const answer =
-    Array.isArray(first) && typeof first[0] === 'string' ? first[0] : undefined
-  if (answer === undefined) return
-
-  const option = matchRetryAnswer(state.options, answer)
-  if (option === undefined) return
-
-  if (option.attempts === null) {
-    await saveState(ctx, sessionID, { ...state, remaining: 1, options: [] })
-    return
-  }
-  await saveState(ctx, sessionID, {
-    spent: state.spent + 1,
-    remaining: option.attempts,
-    options: [],
   })
 }
 
@@ -213,49 +214,51 @@ export default {
     const worktreeStatusBySession = new Map<string, string | null>()
     const controller = new AbortController()
 
-    await ctx.command.transform((editor) => {
-      editor.add({
-        name: 'pipeline-repair',
-        description: 'Repair startup verification blockers before development',
-        execute: async ({ sessionID }) =>
-          repairStartup(ctx, sessionID, directory),
-      })
-    })
+    await registerRepairCommand(ctx, directory)
 
     await ctx.session.hook('prompt', async (event) => {
-      const startup = await loadStartupState(ctx, event.sessionID)
-      const action = startupPromptAction(
-        startup?.status,
-        event.metadata,
-        event.prompt.text,
-        startup?.status === 'repairing' ? startup.repairToken : undefined,
+      await handlePrompt(
+        ctx,
+        event,
+        directory,
+        worktreeStatusBySession,
+        pendingSessions,
       )
-      if (action === 'block') {
-        throw startupFailure(
-          startup?.output ?? 'Run /pipeline-repair to retry.',
-        )
-      }
-      if (action === 'verify') {
-        const result = await runVerify(directory)
-        if (!result.ok) {
-          await saveStartupState(ctx, event.sessionID, {
-            status: 'blocked',
-            output: result.output,
-          })
-          throw startupFailure(result.output)
-        }
-        await saveStartupState(ctx, event.sessionID, { status: 'ready' })
-      }
-      worktreeStatusBySession.set(
-        event.sessionID,
-        await getWorktreeStatus(directory),
-      )
-      pendingSessions.add(event.sessionID)
     })
 
     await ctx.tool.hook('execute.after', async (event) => {
       if (event.tool !== 'question' || event.status !== 'completed') return
-      await applyAnswer(ctx, event.sessionID, event.result.metadata)
+      const state = await loadState(ctx, event.sessionID)
+      if (state.remaining > 0) return
+
+      const result = event.result as
+        | { metadata?: { answers?: unknown } }
+        | undefined
+      const answers = result?.metadata?.answers
+      const [first] = Array.isArray(answers) ? answers : []
+      const answer =
+        Array.isArray(first) && typeof first[0] === 'string'
+          ? first[0]
+          : undefined
+      if (answer === undefined) return
+
+      const choices = state.options
+      const option = matchRetryAnswer(choices, answer)
+      if (option === undefined) return
+
+      if (option.attempts === null) {
+        await saveState(ctx, event.sessionID, {
+          ...state,
+          remaining: 1,
+          options: [],
+        })
+        return
+      }
+      await saveState(ctx, event.sessionID, {
+        spent: state.spent + 1,
+        remaining: option.attempts,
+        options: [],
+      })
     })
 
     void (async () => {
@@ -268,15 +271,12 @@ export default {
         ) {
           continue
         }
-
-        const sessionID = event.data.sessionID
-        const previousStatus = worktreeStatusBySession.get(sessionID)
-        worktreeStatusBySession.delete(sessionID)
-        await gateSession(
+        await handleIdleSession(
           ctx,
-          sessionID,
-          previousStatus ?? null,
-          await getWorktreeStatus(directory),
+          event.data.sessionID,
+          directory,
+          worktreeStatusBySession,
+          pendingSessions,
         )
       }
     })()
