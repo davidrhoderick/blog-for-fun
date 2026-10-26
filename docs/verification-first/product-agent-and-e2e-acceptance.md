@@ -261,6 +261,8 @@ Do not run `pnpm verify` or the trust pipeline in this phase.
 
 **Purpose:** Convert accepted interactions into executable tests.
 
+This is implemented by `.opencode/agents/e2e-author.md` (subagent). It uses the Playwright MCP server and writes tests under `tests/`.
+
 **System instructions:**
 
 You create Playwright acceptance tests from recorded product interactions.
@@ -279,7 +281,7 @@ Show proposed assertions to product for approval.
 
 Do not change approved expected behavior.
 
-Run the tests against a fresh environment and report failures accurately.
+Run the tests against a fresh environment with `pnpm e2e` and report failures accurately.
 
 Do not hide failed tests or weaken assertions to obtain a passing result.
 

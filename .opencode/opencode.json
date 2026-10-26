@@ -3,5 +3,13 @@
   "plugins": [
     "superpowers@git+https://github.com/obra/superpowers.git",
     "@dietrichgebert/ponytail"
-  ]
+  ],
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp", "--devtools"]
+      }
+    }
+  }
 }
