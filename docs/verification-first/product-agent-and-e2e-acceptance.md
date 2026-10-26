@@ -146,7 +146,7 @@ When product selects **Accept Feature**:
 
 - Save the current implementation to a Git commit on a new branch off `main` (stacking only if explicitly requested).
 - Record the accepted revision (commit SHA).
-- Write a feature manifest (for example `docs/verification-first/features/<ticket>.md`) with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred).
+- Write a feature manifest (for example `docs/features/<ticket>.md`) with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred).
 - Record the feature requirements and environment configuration.
 - Prevent later changes to the accepted implementation without a new revision.
 
