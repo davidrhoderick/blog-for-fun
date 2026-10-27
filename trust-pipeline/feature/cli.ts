@@ -2,28 +2,14 @@ import { execFileSync } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { cleanRuns, createRunDirectory, markSuccessfulRun } from './artifacts'
-import { readManifest } from './manifest'
+import { type FeatureManifest, readManifest } from './manifest'
+import { parseFeatureOptions } from './options'
 import {
+  assertAcceptedTestsUnchanged,
   featureGrep,
   selectFeatureTests,
   validateFeatureBaseURL,
 } from './playwright'
-
-type Options = { id?: string; capture?: boolean; run?: string; keep?: number }
-
-function options(args: string[]): Options {
-  const result: Options = {}
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '--capture') result.capture = true
-    else if (arg === '--id') result.id = args[++index]
-    else if (arg === '--run') result.run = args[++index]
-    else if (arg === '--keep') result.keep = Number(args[++index])
-    else throw new Error(`Unknown argument: ${arg}`)
-  }
-  if (!result.id) throw new Error('Pass --id <FEATURE_ID>')
-  return result
-}
 
 const root = process.cwd()
 const artifactRoot = (id: string) =>
@@ -36,22 +22,67 @@ async function runFeatureTests(
 ): Promise<void> {
   const manifest = await readManifest(id, root)
   const configuredBaseURL = process.env.FEATURE_BASE_URL
-  if (!configuredBaseURL)
-    throw new Error('Set FEATURE_BASE_URL from the feature environment profile')
+  if (!configuredBaseURL) throw new Error('FEATURE_BASE_URL is required')
   const baseURL = validateFeatureBaseURL(configuredBaseURL)
-
-  const grep = featureGrep(manifest.acceptance.playwrightTag)
-  const testArgs = [...manifest.acceptance.tests]
-  const listOutput = execFileSync(
-    'pnpm',
-    ['exec', 'playwright', 'test', '--list', '--grep', grep, ...testArgs],
-    { cwd: root, encoding: 'utf8' },
+  const testSources = await Promise.all(
+    manifest.acceptance.tests.map(async (testPath) => ({
+      accepted: execFileSync(
+        'git',
+        ['show', `${manifest.acceptance.acceptedSha}:${testPath}`],
+        { cwd: root, encoding: 'utf8' },
+      ),
+      current: await readFile(path.join(root, testPath), 'utf8'),
+    })),
   )
+  assertAcceptedTestsUnchanged(testSources)
+  const grep = featureGrep(manifest.acceptance.playwrightTag)
   const selected = selectFeatureTests(
-    listOutput,
+    execFileSync(
+      'pnpm',
+      [
+        'exec',
+        'playwright',
+        'test',
+        '--list',
+        '--grep',
+        grep,
+        ...manifest.acceptance.tests,
+      ],
+      { cwd: root, encoding: 'utf8' },
+    ),
     id,
     manifest.acceptance.playwrightTag,
   )
+  await executeFeatureTests({
+    id,
+    stage,
+    capture,
+    manifest,
+    grep,
+    baseURL,
+    selectedCount: selected.length,
+  })
+}
+
+type FeatureTestRun = {
+  id: string
+  stage: 'precheck' | 'e2e'
+  capture: boolean
+  manifest: FeatureManifest
+  grep: string
+  baseURL: string
+  selectedCount: number
+}
+
+async function executeFeatureTests({
+  id,
+  stage,
+  capture,
+  manifest,
+  grep,
+  baseURL,
+  selectedCount,
+}: FeatureTestRun): Promise<void> {
   const run = capture ? await createRunDirectory(id, root) : undefined
   const env = {
     ...process.env,
@@ -59,88 +90,88 @@ async function runFeatureTests(
     ...(run ? { FEATURE_CAPTURE_DIR: run.directory } : {}),
   }
   const startedAt = new Date().toISOString()
-  const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim()
-  const artifactPaths = run ? [run.directory] : []
-
+  const result: TestResult = {
+    featureId: id,
+    stage,
+    sourceSha: execFileSync('git', ['rev-parse', 'HEAD']).toString().trim(),
+    baselineSha: manifest.acceptance.acceptedSha,
+    testCount: selectedCount,
+    passed: selectedCount,
+    failed: 0,
+    environmentProfile: process.env.FEATURE_ENVIRONMENT_PROFILE ?? 'external',
+    artifactPaths: run ? [run.directory] : [],
+    startedAt,
+    finishedAt: new Date().toISOString(),
+  }
   try {
     execFileSync(
       'pnpm',
-      ['exec', 'playwright', 'test', '--grep', grep, ...testArgs],
+      [
+        'exec',
+        'playwright',
+        'test',
+        '--grep',
+        grep,
+        ...manifest.acceptance.tests,
+      ],
       { cwd: root, env, stdio: 'inherit' },
     )
-    const playwrightResult = run
-      ? (JSON.parse(
-          await readFile(
-            path.join(run.directory, 'playwright-results.json'),
-            'utf8',
-          ),
-        ) as { stats: { expected: number; unexpected: number; flaky: number } })
-      : undefined
-    const result = {
-      featureId: id,
-      stage,
-      sourceSha,
-      baselineSha: manifest.acceptance.acceptedSha,
-      testCount: selected.length,
-      passed: playwrightResult
-        ? playwrightResult.stats.expected + playwrightResult.stats.flaky
-        : selected.length,
-      failed: playwrightResult?.stats.unexpected ?? 0,
-      environmentProfile: process.env.FEATURE_ENVIRONMENT_PROFILE ?? 'external',
-      artifactPaths,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-    }
     if (run) {
-      await writeFile(
-        path.join(run.directory, 'result.json'),
-        `${JSON.stringify(result, null, 2)}\n`,
-      )
+      const report = JSON.parse(
+        await readFile(
+          path.join(run.directory, 'playwright-results.json'),
+          'utf8',
+        ),
+      ) as { stats: PlaywrightStats }
+      result.passed = report.stats.expected + report.stats.flaky
+      result.failed = report.stats.unexpected
+      await writeResult(run, result)
       await markSuccessfulRun(id, run.runId, root)
     }
     console.log(JSON.stringify(result, null, 2))
   } catch (error) {
     if (run) {
-      let failed = selected.length
-      try {
-        const report = JSON.parse(
-          await readFile(
-            path.join(run.directory, 'playwright-results.json'),
-            'utf8',
-          ),
-        ) as { stats: { unexpected: number } }
-        failed = report.stats.unexpected
-      } catch {
-        // Playwright can fail before writing its JSON report.
-      }
-      await writeFile(
-        path.join(run.directory, 'result.json'),
-        `${JSON.stringify(
-          {
-            featureId: id,
-            stage,
-            sourceSha,
-            baselineSha: manifest.acceptance.acceptedSha,
-            testCount: selected.length,
-            passed: Math.max(0, selected.length - failed),
-            failed,
-            environmentProfile:
-              process.env.FEATURE_ENVIRONMENT_PROFILE ?? 'external',
-            artifactPaths,
-            startedAt,
-            finishedAt: new Date().toISOString(),
-            errorCategory: 'test-failure',
-          },
-          null,
-          2,
-        )}\n`,
+      const stats = await readFile(
+        path.join(run.directory, 'playwright-results.json'),
+        'utf8',
       )
+        .then(
+          (value) => (JSON.parse(value) as { stats: PlaywrightStats }).stats,
+        )
+        .catch(() => undefined)
+      result.passed = stats ? stats.expected + stats.flaky : 0
+      result.failed = stats?.unexpected ?? selectedCount
+      result.errorCategory = 'test-failure'
+      await writeResult(run, result)
     }
     throw error
   }
+}
+
+async function writeResult(
+  run: { directory: string },
+  result: TestResult,
+): Promise<void> {
+  await writeFile(
+    path.join(run.directory, 'result.json'),
+    `${JSON.stringify(result, null, 2)}\n`,
+  )
+}
+
+type PlaywrightStats = { expected: number; unexpected: number; flaky: number }
+type TestResult = {
+  featureId: string
+  stage: string
+  sourceSha: string
+  baselineSha: string
+  testCount: number
+  passed: number
+  failed: number
+  environmentProfile: string
+  artifactPaths: string[]
+  startedAt: string
+  finishedAt: string
+  errorCategory?: string
 }
 
 async function generateTests(id: string, runId?: string): Promise<void> {
@@ -185,44 +216,49 @@ async function generateTests(id: string, runId?: string): Promise<void> {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2)
-  const parsed = options(args)
-  const id = parsed.id
-  if (!id) throw new Error('Pass --id <FEATURE_ID>')
-  if (command === 'validate') {
-    console.log(JSON.stringify(await readManifest(id, root), null, 2))
-  } else if (command === 'precheck' || command === 'e2e') {
-    await runFeatureTests(id, command, parsed.capture === true)
-  } else if (command === 'generate-tests') {
-    await generateTests(id, parsed.run)
-  } else if (command === 'clean') {
-    await cleanRuns(id, parsed.keep ?? 3, root)
-  } else if (command === 'status') {
-    const manifest = await readManifest(id, root)
-    let latest: string | null = null
-    try {
-      latest = (
-        JSON.parse(
-          await readFile(path.join(artifactRoot(id), 'latest.json'), 'utf8'),
-        ) as { runId: string }
-      ).runId
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  const parsed = parseFeatureOptions(args)
+  switch (command) {
+    case 'validate':
+      console.log(JSON.stringify(await readManifest(parsed.id, root), null, 2))
+      return
+    case 'precheck':
+    case 'e2e':
+      await runFeatureTests(parsed.id, command, parsed.capture === true)
+      return
+    case 'generate-tests':
+      await generateTests(parsed.id, parsed.run)
+      return
+    case 'clean':
+      await cleanRuns(parsed.id, parsed.keep ?? 3, root)
+      return
+    case 'status': {
+      const manifest = await readManifest(parsed.id, root)
+      const latestContents = await readFile(
+        path.join(artifactRoot(parsed.id), 'latest.json'),
+        'utf8',
+      ).catch((error: NodeJS.ErrnoException) =>
+        error.code === 'ENOENT' ? '' : Promise.reject(error),
+      )
+      const latestRun = latestContents
+        ? (JSON.parse(latestContents) as { runId: string }).runId
+        : null
+      console.log(
+        JSON.stringify(
+          {
+            featureId: parsed.id,
+            state: manifest.state ?? 'unknown',
+            latestRun,
+          },
+          null,
+          2,
+        ),
+      )
+      return
     }
-    console.log(
-      JSON.stringify(
-        {
-          featureId: id,
-          state: manifest.state ?? 'unknown',
-          latestRun: latest,
-        },
-        null,
-        2,
-      ),
-    )
-  } else {
-    throw new Error(
-      'Command must be validate, precheck, generate-tests, e2e, clean, or status',
-    )
+    default:
+      throw new Error(
+        'Command must be validate, precheck, generate-tests, e2e, clean, or status',
+      )
   }
 }
 

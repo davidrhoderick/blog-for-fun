@@ -349,7 +349,7 @@ The review stage diffs the working tree against `HEAD` by default. On a clean CI
 
 Pull requests from forks do not receive repository secrets by default, so the doctor gate fails and `pnpm verify` is red. A maintainer must run review from a trusted context before merge; do not label an unrun review as passing. Do not use `pull_request_target` with untrusted code.
 
-The first CI increment runs `pnpm verify`. Add the feature manifest validation and selected feature E2E gate after `pnpm feature:e2e` is implemented. Missing or unselected E2E tests must fail that gate. CI must execute against the same commit that is being reviewed or merged.
+CI runs `pnpm verify`. Feature manifest validation and selected feature E2E remain part of the local engineering workflow; CI executes against the same commit that is being reviewed or merged.
 
 Use the normal engineering review gate by default. A **fast path** may skip human engineering review when repository policy explicitly permits it and the relevant checks pass. A green `pnpm verify` alone cannot prove the architecture is appropriate; treat fast-path eligibility as an explicit policy, not an agent assertion.
 
@@ -503,7 +503,7 @@ Store the current workflow state in the feature manifest and the actual check re
 | Accepted baseline is lost | Preserve immutable ref, SHA, test content, and fixture profile |
 | CI is green on an outdated revision | Bind checks and reviews to the latest head SHA; invalidate stale status |
 | CI review sees an empty diff | Set `VERIFY_BASE_REF` to the pull-request base or previous push SHA |
-| Fork PR cannot read secrets | Use a maintainer-controlled workflow; never run untrusted code with `pull_request_target` |
+| Fork PR cannot read secrets | The verify job fails its doctor gate; a maintainer must run review from a trusted context. Never use `pull_request_target` |
 | Broad regression escapes targeted E2E | Run scheduled smoke and regression suites; add impact selection later |
 | Product's exploratory work is blocked by CI | Allow local product iteration; restrict merging, not experimentation |
 

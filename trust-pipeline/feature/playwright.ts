@@ -10,6 +10,16 @@ export function validateFeatureBaseURL(value: string): string {
   return url.toString()
 }
 
+export function assertAcceptedTestsUnchanged(
+  files: { accepted: string; current: string }[],
+): void {
+  if (files.some(({ accepted, current }) => accepted !== current)) {
+    throw new Error(
+      'Accepted E2E tests are immutable; restore the accepted files',
+    )
+  }
+}
+
 export const featureGrep = (tag: string): string =>
   `(^|\\s)${escapeRegex(tag)}(\\s|$)`
 
