@@ -20,8 +20,9 @@ const RUBRIC = path.resolve(
 
 const MODEL = 'jev-1.13.0'
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
-/** The task base: nothing is committed until the pipeline is green, so it is HEAD. */
-const TASK_BASE = 'HEAD'
+/** The committed diff base in CI; locally, review the working tree against HEAD. */
+export const reviewBaseRef = (env: NodeJS.ProcessEnv = process.env): string =>
+  env.VERIFY_BASE_REF || 'HEAD'
 /** Jev 1.13: 32k tokens for `state` plus the longest question. */
 export const STATE_BUDGET = 32_000
 const CHARS_PER_TOKEN = 4
@@ -129,7 +130,7 @@ export async function collectDiff(ref = 'HEAD'): Promise<string> {
 const sh = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 
 /** Changed symbols: whole-file AST declarations whose lines the diff touches. */
-export function collectSymbols(diff: string, ref = TASK_BASE): Symbol[] {
+export function collectSymbols(diff: string, ref = 'HEAD'): Symbol[] {
   const root = repoRoot()
   const symbols: Symbol[] = []
   for (const { file, ranges } of parseDiff(diff)) {
@@ -343,10 +344,11 @@ export const reviewStage: Stage = {
 }
 
 async function runReview(): Promise<StageResult> {
-  const diff = await collectDiff(TASK_BASE)
+  const baseRef = reviewBaseRef()
+  const diff = await collectDiff(baseRef)
   if (!diff.trim()) return { name: 'review', ok: true, output: 'no changes' }
   const rubric = parseRubric(readFileSync(RUBRIC, 'utf8'))
-  const symbols = collectSymbols(diff, TASK_BASE)
+  const symbols = collectSymbols(diff, baseRef)
   if (symbols.length === 0)
     return { name: 'review', ok: true, output: 'no changed symbols' }
   const reviewed = await reviewSymbols(symbols, rubric)

@@ -13,6 +13,7 @@ import {
   collectSymbols,
   parseRubric,
   type Rubric,
+  reviewBaseRef,
   reviewDiff,
   reviewStage,
   reviewSymbols,
@@ -20,6 +21,14 @@ import {
 
 // Never load a real .env: the missing-key test must not reach the network.
 vi.mock('dotenv', () => ({ config: () => ({}) }))
+
+test('review base prefers VERIFY_BASE_REF and falls back to HEAD', {
+  tags: ['unit'],
+}, () => {
+  expect(reviewBaseRef({ VERIFY_BASE_REF: 'origin/main' })).toBe('origin/main')
+  expect(reviewBaseRef({ VERIFY_BASE_REF: '' })).toBe('HEAD')
+  expect(reviewBaseRef({})).toBe('HEAD')
+})
 
 const rubricPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
