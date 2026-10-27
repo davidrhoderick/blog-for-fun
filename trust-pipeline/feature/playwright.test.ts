@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest'
-import { featureGrep, selectFeatureTests } from './playwright'
+import {
+  featureGrep,
+  selectFeatureTests,
+  validateFeatureBaseURL,
+} from './playwright'
 
 test('builds a boundary-aware exact feature-tag pattern', {
   tags: ['unit'],
@@ -37,4 +41,14 @@ test('selects listed test identifiers and rejects empty or mismatched selections
   expect(() =>
     selectFeatureTests(listing, 'INS-123', '@feature-INS-1234'),
   ).toThrow(/tag/i)
+})
+
+test('accepts only loopback feature URLs', { tags: ['unit'] }, () => {
+  expect(validateFeatureBaseURL('http://127.0.0.1:3000')).toBe(
+    'http://127.0.0.1:3000/',
+  )
+  expect(() => validateFeatureBaseURL('https://example.com')).toThrow(
+    /loopback/i,
+  )
+  expect(() => validateFeatureBaseURL('file:///etc/passwd')).toThrow(/http/i)
 })

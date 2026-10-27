@@ -8,7 +8,13 @@
     "test:coverage": "pnpm -r --workspace-concurrency=1 run test:coverage",
     "product": "headroom wrap opencode -- mini --agent product-dev",
     "engineer": "opencode mini --agent engineering",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "feature:validate": "pnpm --filter trust-pipeline exec tsx feature/cli.ts validate",
+    "feature:precheck": "pnpm --filter trust-pipeline exec tsx feature/cli.ts precheck",
+    "feature:generate-tests": "pnpm --filter trust-pipeline exec tsx feature/cli.ts generate-tests",
+    "feature:e2e": "pnpm --filter trust-pipeline exec tsx feature/cli.ts e2e",
+    "feature:clean": "pnpm --filter trust-pipeline exec tsx feature/cli.ts clean",
+    "feature:status": "pnpm --filter trust-pipeline exec tsx feature/cli.ts status"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

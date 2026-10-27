@@ -1,6 +1,15 @@
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+export function validateFeatureBaseURL(value: string): string {
+  const url = new URL(value)
+  if (!['http:', 'https:'].includes(url.protocol))
+    throw new Error('Feature base URL must use HTTP or HTTPS')
+  if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname))
+    throw new Error('Feature base URL must point to a loopback host')
+  return url.toString()
+}
+
 export const featureGrep = (tag: string): string =>
   `(^|\\s)${escapeRegex(tag)}(\\s|$)`
 

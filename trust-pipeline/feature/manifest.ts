@@ -5,6 +5,7 @@ import { parse } from 'yaml'
 export type FeatureManifest = {
   schemaVersion: 1
   id: string
+  state?: string
   acceptance: {
     acceptedSha: string
     playwrightTag: string
@@ -15,11 +16,15 @@ export type FeatureManifest = {
 const featureId = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 const sha = /^[a-f\d]{40}$/i
 
+export function assertFeatureId(id: string): void {
+  if (!featureId.test(id)) throw new Error(`Invalid feature ID: ${id}`)
+}
+
 export async function readManifest(
   id: string,
   root = process.cwd(),
 ): Promise<FeatureManifest> {
-  if (!featureId.test(id)) throw new Error(`Invalid feature ID: ${id}`)
+  assertFeatureId(id)
 
   const manifestPath = path.join(root, 'docs/features', id, 'feature.yaml')
   const value: unknown = parse(await readFile(manifestPath, 'utf8'))

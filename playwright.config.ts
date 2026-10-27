@@ -1,4 +1,11 @@
+import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
+
+const captureDirectory = process.env.FEATURE_CAPTURE_DIR
+const outputDirectory =
+  captureDirectory ?? path.join(tmpdir(), `playwright-${randomUUID()}`)
 
 /**
  * Read environment variables from file.
@@ -22,15 +29,34 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: captureDirectory
+    ? [
+        [
+          'json',
+          {
+            outputFile: path.join(captureDirectory, 'playwright-results.json'),
+          },
+        ],
+        [
+          'html',
+          {
+            outputFolder: path.join(captureDirectory, 'report'),
+            open: 'never',
+          },
+        ],
+      ]
+    : 'line',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    // baseURL: 'http://localhost:3000',
+    baseURL: process.env.FEATURE_BASE_URL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: captureDirectory ? 'on' : 'off',
+    video: captureDirectory ? 'on' : 'off',
+    screenshot: captureDirectory ? 'on' : 'off',
   },
+  outputDir: path.join(outputDirectory, 'playwright'),
 
   /* Configure projects for major browsers */
   projects: [
