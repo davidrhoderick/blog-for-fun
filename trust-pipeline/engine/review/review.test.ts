@@ -11,6 +11,7 @@ import {
   type Symbol as ChangedSymbol,
   collectDiff,
   collectSymbols,
+  filterReviewDiff,
   parseRubric,
   type Rubric,
   reviewBaseRef,
@@ -153,6 +154,26 @@ test('collectDiff includes tracked changes and untracked files', {
 
   expect(diff).toContain('sample.ts')
   expect(diff).toContain('new.ts')
+})
+
+test('review diff excludes Markdown but keeps source changes', {
+  tags: ['unit'],
+}, () => {
+  const diff = [
+    'diff --git a/docs/notes.md b/docs/notes.md',
+    '+++ b/docs/notes.md',
+    '@@ -0,0 +1 @@',
+    '+Do not send this prose to code review.',
+    'diff --git a/src/example.ts b/src/example.ts',
+    '+++ b/src/example.ts',
+    '@@ -0,0 +1 @@',
+    '+export const value = 1',
+  ].join('\n')
+
+  const reviewed = filterReviewDiff(diff)
+  expect(reviewed).not.toContain('Do not send this prose')
+  expect(reviewed).toContain('src/example.ts')
+  expect(reviewed).toContain('export const value = 1')
 })
 
 test('batchSymbols splits so each state stays under the budget', {

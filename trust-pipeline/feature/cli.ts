@@ -174,7 +174,10 @@ type TestResult = {
   errorCategory?: string
 }
 
-async function generateTests(id: string, runId?: string): Promise<void> {
+async function prepareContractTestGeneration(
+  id: string,
+  runId?: string,
+): Promise<void> {
   const manifest = await readManifest(id, root)
   const featureArtifacts = artifactRoot(id)
   const latest = JSON.parse(
@@ -226,7 +229,7 @@ async function main(): Promise<void> {
       await runFeatureTests(parsed.id, command, parsed.capture === true)
       return
     case 'generate-tests':
-      await generateTests(parsed.id, parsed.run)
+      await prepareContractTestGeneration(parsed.id, parsed.run)
       return
     case 'clean':
       await cleanRuns(parsed.id, parsed.keep ?? 3, root)

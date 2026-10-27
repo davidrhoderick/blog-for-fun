@@ -72,6 +72,14 @@ export function parseDiff(diff: string): FileDiff[] {
   return files
 }
 
+/** Keep code changes in the review context; prose has no code-symbol rubric. */
+export function filterReviewDiff(diff: string): string {
+  return diff
+    .split(/(?=^diff --git )/m)
+    .filter((section) => !/^\+\+\+ b\/.*\.mdx?$/im.test(section))
+    .join('')
+}
+
 function repoRoot(): string {
   return execFileSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: process.cwd(),
@@ -345,7 +353,7 @@ export const reviewStage: Stage = {
 
 async function runReview(): Promise<StageResult> {
   const baseRef = reviewBaseRef()
-  const diff = await collectDiff(baseRef)
+  const diff = filterReviewDiff(await collectDiff(baseRef))
   if (!diff.trim()) return { name: 'review', ok: true, output: 'no changes' }
   const rubric = parseRubric(readFileSync(RUBRIC, 'utf8'))
   const symbols = collectSymbols(diff, baseRef)
