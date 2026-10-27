@@ -1,7 +1,7 @@
 # OpenCode Engineering Workflow
 
 **Status:** Ready for a first implementation trial
-**OpenCode version:** 2.1.4 (v2 only)
+**OpenCode baseline:** 2.1.4 (v2 only; routine patch and minor updates are supported)
 **Writing style:** ASD-STE100-inspired controlled English; not certified against ASD-STE100.
 
 ## 1. Purpose
@@ -47,7 +47,7 @@ requirements:
   gherkin: docs/features/INS-123/comments.feature # optional
   ticket: INS-123 # optional external ticket reference
 acceptance:
-  acceptedSha: 1111111111111111111111111111111111111111 # full Git SHA
+  acceptedSha: '1111111111111111111111111111111111111111' # full Git SHA
   baselineRef: refs/tags/accepted/INS-123
   playwrightTag: '@feature-INS-123'
   tests:
@@ -357,11 +357,11 @@ Run all retained E2E tests on a schedule, separated into **smoke** and **regress
 
 ## 9. OpenCode configuration and prompts
 
-This workflow uses **OpenCode 2.1.4 only**. V1 agent and command formats are not supported. Use the project-local `.opencode/agents/` and `.opencode/commands/` directories. The file name becomes the agent or command ID. The local pipeline gate plugin already uses the v2 plugin API.
+This workflow targets **OpenCode v2**, tested against 2.1.4. Do not pin an exact OpenCode patch version. Support routine v2 patch and minor updates; review compatibility before adopting a release that changes v2 agent, command, permission, or plugin behavior. V1 formats are not supported. Use the project-local `.opencode/agents/` and `.opencode/commands/` directories. The file name becomes the agent or command ID. The local pipeline gate plugin uses the v2 plugin API.
 
 Use v2 frontmatter. Do not use legacy top-level fields such as `prompt`, `permission`, `tools`, `disable`, or `maxSteps`.
 
-The examples below give portable Markdown instruction bodies. Keep the frontmatter fields consistent with OpenCode 2.1.4.
+The examples below give portable Markdown instruction bodies. Keep the frontmatter fields consistent with OpenCode v2 and verify against the installed release.
 
 ### Primary agent — `.opencode/agents/engineering.md`
 
