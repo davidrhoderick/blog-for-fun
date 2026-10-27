@@ -27,6 +27,10 @@ extraction mechanical instead of a refactor.
 | JSX inside `useMemo`/`useCallback` | forbidden (admin, blog) | Biome GritQL plugin |
 | Duplication | ≤ 3% | `jscpd` (scans stage) |
 
+A single-caller helper may be extracted to satisfy a deterministic structure
+limit only when it names a cohesive operation or phase boundary. Do not split
+mechanically or add wrappers/helper chains to evade a limit.
+
 Generated code (`*.generated.ts`, `apps/admin/app/__generated__/**`), `.serena/`
 (indexer config), documentation markdown, and test files (`*.test.ts`,
 `*.test.tsx`) are not shipped source and are exempt from these checks. The size

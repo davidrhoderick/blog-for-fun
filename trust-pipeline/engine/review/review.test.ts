@@ -25,6 +25,10 @@ const rubricPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../project/rubric.md',
 )
+const architecturePath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../docs/architecture.md',
+)
 
 const BEFORE = `export function greet(): string {
   return 'hi'
@@ -101,6 +105,19 @@ test('the shipped rubric parses into pass/fail Choice items', {
   expect(ids).toContain('methodology')
   expect(ids).toContain('architecture')
   expect(rubric.items.filter((item) => item.scope === 'diff')).toHaveLength(1)
+  const abstraction = rubric.items.find(
+    (item) => item.id === 'structure-abstraction',
+  )
+  expect(abstraction?.question).toMatch(/deterministic structure limit/i)
+  expect(abstraction?.options[0]).toMatch(
+    /cohesive operation or phase boundary/i,
+  )
+  expect(abstraction?.options[1]).toMatch(
+    /trivial wrappers, mechanical splits, or helper chains/i,
+  )
+  expect(readFileSync(architecturePath, 'utf8')).toContain(
+    '| Function length | ≤ 80 LOC |',
+  )
   for (const item of rubric.items) {
     expect(item.options).toHaveLength(2)
     expect(item.question.length).toBeGreaterThan(0)

@@ -28,9 +28,9 @@ fail: The symbol mixes responsibilities, or carries unrelated work that belongs 
 
 ## structure-abstraction
 
-question: Is any abstraction this symbol adds justified by more than one caller, without single-use indirection or a chain of micro-helpers?
-pass: Abstractions have multiple callers, the symbol adds no abstraction, or it is a single local helper inside a route module that names a step the route performs.
-fail: The symbol adds an abstraction, wrapper, or helper chain with a single caller, or splits one behavior into several trivial helpers.
+question: Is each abstraction reused by multiple callers, or is a single-caller helper necessary to satisfy a deterministic structure limit and cohesive?
+pass: No abstraction is added; abstractions have multiple callers; or a single-use helper is necessary to satisfy a deterministic structure limit and names a cohesive operation or phase boundary.
+fail: A single-use helper is not needed to meet a deterministic structure limit or is a mechanical split rather than a cohesive operation. Trivial wrappers, mechanical splits, or helper chains remain failures.
 
 ## structure-naming
 
