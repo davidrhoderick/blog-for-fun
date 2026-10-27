@@ -345,9 +345,9 @@ The `.github/workflows/verify.yml` workflow must provide:
 - `JEV_API_KEY` as a repository secret for the review stage.
 - Registry and `api.typesafe.ai` network access.
 
-The review stage diffs the working tree against `HEAD` by default. On a clean CI checkout that is empty. CI must set `VERIFY_BASE_REF` to the pull-request base SHA or the push's previous SHA so the review reads the committed diff. Checkout must fetch enough history to resolve that base.
+The review stage diffs the working tree against `HEAD` by default. On a clean CI checkout that is empty. CI sets `VERIFY_BASE_REF` to the pull-request base SHA or the push's previous SHA so review reads the committed diff. On a first push with an all-zero previous SHA, it uses Git's empty-tree SHA. Checkout fetches full history so the base resolves.
 
-Pull requests from forks do not receive repository secrets by default. Run those through a maintainer-controlled workflow or accept that the review stage cannot run. Do not use `pull_request_target` with untrusted code.
+Pull requests from forks do not receive repository secrets by default, so the doctor gate fails and `pnpm verify` is red. A maintainer must run review from a trusted context before merge; do not label an unrun review as passing. Do not use `pull_request_target` with untrusted code.
 
 The first CI increment runs `pnpm verify`. Add the feature manifest validation and selected feature E2E gate after `pnpm feature:e2e` is implemented. Missing or unselected E2E tests must fail that gate. CI must execute against the same commit that is being reviewed or merged.
 
