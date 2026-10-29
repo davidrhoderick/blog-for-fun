@@ -25,6 +25,15 @@ not fail `--audit-level high`, so it needs no `ignoreGhsas` entry. Its patched
 version (`>=1.1.4`) is likewise unpublished. If the gate is ever lowered, it
 would need the same treatment as `braces`.
 
+## OSV-only accepted finding
+
+OSV Scanner reports every severity, so an unpatched low-severity development-
+tool finding is recorded here and in `osv-scanner.toml` with a narrow ignore.
+
+| GHSA | Package | Severity | Why accepted |
+|---|---|---|---|
+| GHSA-gcqx-w48m-w2h4 | `deepmerge` | low | No patched release is published. It is reachable only through the admin dev-only `shadcn` toolchain and is not a production dependency. Revisit when a fix is released. |
+
 ## Already cleared
 
 Three advisories were removed by replacing the abandoned `s3rver` dev S3 mock

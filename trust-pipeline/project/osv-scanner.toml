@@ -3,3 +3,7 @@
 [[IgnoredVulns]]
 id = "MAL-2025-21003"
 reason = "fs@0.0.1-security is npm's security-holding placeholder pulled in by tsarch; it is never loaded (Node's built-in fs wins)"
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+reason = "deepmerge has no patched release; it is reachable only through admin's dev-only shadcn toolchain, not production dependencies"
