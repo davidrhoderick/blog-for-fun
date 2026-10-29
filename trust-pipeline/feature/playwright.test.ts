@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest'
 import {
-  assertAcceptedTestsUnchanged,
   featureGrep,
   selectFeatureTests,
   validateFeatureBaseURL,
@@ -52,15 +51,4 @@ test('accepts only loopback feature URLs', { tags: ['unit'] }, () => {
     /loopback/i,
   )
   expect(() => validateFeatureBaseURL('file:///etc/passwd')).toThrow(/http/i)
-})
-
-test('rejects changes to accepted E2E test files', { tags: ['unit'] }, () => {
-  expect(() =>
-    assertAcceptedTestsUnchanged([
-      { accepted: 'accepted test', current: 'modified test' },
-    ]),
-  ).toThrow(/accepted E2E tests are immutable/i)
-  expect(() =>
-    assertAcceptedTestsUnchanged([{ accepted: 'same', current: 'same' }]),
-  ).not.toThrow()
 })

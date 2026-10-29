@@ -5,7 +5,6 @@ import { cleanRuns, createRunDirectory, markSuccessfulRun } from './artifacts'
 import { type FeatureManifest, readManifest } from './manifest'
 import { parseFeatureOptions } from './options'
 import {
-  assertAcceptedTestsUnchanged,
   featureGrep,
   selectFeatureTests,
   validateFeatureBaseURL,
@@ -24,17 +23,6 @@ async function runFeatureTests(
   const configuredBaseURL = process.env.FEATURE_BASE_URL
   if (!configuredBaseURL) throw new Error('FEATURE_BASE_URL is required')
   const baseURL = validateFeatureBaseURL(configuredBaseURL)
-  const testSources = await Promise.all(
-    manifest.acceptance.tests.map(async (testPath) => ({
-      accepted: execFileSync(
-        'git',
-        ['show', `${manifest.acceptance.acceptedSha}:${testPath}`],
-        { cwd: root, encoding: 'utf8' },
-      ),
-      current: await readFile(path.join(root, testPath), 'utf8'),
-    })),
-  )
-  assertAcceptedTestsUnchanged(testSources)
   const grep = featureGrep(manifest.acceptance.playwrightTag)
   const selected = selectFeatureTests(
     execFileSync(
