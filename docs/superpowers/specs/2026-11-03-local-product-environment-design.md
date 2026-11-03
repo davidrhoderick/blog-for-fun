@@ -35,6 +35,8 @@ workarounds go to engineering, not back to product as implementation questions.
 
 ```sh
 pnpm product:feature --id BLOG-123 --app blog
+# Resume that managed feature worktree later:
+pnpm product:feature --id BLOG-123 --app blog --resume
 ```
 
 The root command is a Node.js standard-library script so it can run before
@@ -46,11 +48,19 @@ or `blog`. An optional `--base-ref` is for explicit stacking; the normal default
 is the latest fetched `origin/main`. While developing this helper before it is
 merged, test it with `--base-ref HEAD` so the new worktree contains the helper.
 
-The launcher must not rebase or modify the invoking worktree. It fails clearly
-if its target branch/worktree already exists or the requested base cannot be
-resolved. It never force-removes a worktree, deletes user data, or kills a
-process it did not start. On exit it stops only its own app processes and keeps
-the feature worktree and local database for resuming work.
+Without `--resume`, the launcher fails clearly if its target branch/worktree
+already exists or the requested base cannot be resolved. `--resume` is explicit:
+it accepts only the `product/<id>` branch registered at the exact
+`.worktrees/<id>` path, reuses its local database, and preserves all tracked and
+untracked changes. Resume cannot be combined with `--base-ref`; it does not
+fetch, rebase, reset, or rerun baseline verification against a branch that may
+contain product edits. It reruns `pnpm install --frozen-lockfile` to match the
+worktree's current lockfile.
+
+The launcher never rebases or modifies the invoking worktree. It never
+force-removes a worktree, deletes product data, or kills a process it did not
+start. On exit it stops only its own app processes and keeps the feature
+worktree and local database for resuming work.
 
 ## Environment behavior
 
@@ -59,6 +69,9 @@ the feature worktree and local database for resuming work.
   database, start the server and selected UI, verify readiness, then launch the
   product agent. If baseline verification fails, stop before product work and
   report the failure to engineering; product should not have to diagnose it.
+- On `--resume`, validate the exact managed branch/path, preserve the worktree,
+  rerun frozen dependency installation, and skip baseline verification; then
+  migrate/reuse the persistent local DB and run app health checks.
 - Check `git status` before and after baseline verification. Never clean or reset
   generated/user changes automatically. If verification requires the pipeline's
   `JEV_API_KEY` and it is unavailable, report that as an engineering setup
@@ -71,6 +84,10 @@ the feature worktree and local database for resuming work.
   database, bootstrap one local administrator; detect an existing account and
   skip bootstrap when resuming. Use the repository's existing package scripts;
   their dev commands already run the relevant codegen.
+- Keep the persistent product database at
+  `apps/server/.local/product-<id>.db`; this directory is already ignored.
+  Managed E2E uses and removes a separate temporary directory under the OS temp
+  directory.
 - Use the existing local-only bootstrap defaults (`dev@example.com`,
   `Dev Admin`, `dev-only`) for the local file database. Keep these credentials
   out of remote environments and source-controlled files.
@@ -127,9 +144,11 @@ silently inferred by the launcher.
    before the product agent launches. An occupied port, existing branch/path,
    invalid ID/app, or non-local database fails safely without deleting or
    rewriting user state.
-4. Ctrl-C stops only launcher-owned processes and leaves the worktree/database
-   available to resume. A repeated launch reuses the database and does not run
-   first-admin bootstrap again.
+4. A fresh invocation that collides with an existing branch/path fails without
+   changing it. `--resume` accepts only the matching managed branch/path,
+   preserves all changes, reuses its database, and does not change existing
+   administrator credentials. Ctrl-C stops only launcher-owned processes and
+   leaves the worktree/database available.
 5. `feature:precheck` and `feature:e2e` run without `FEATURE_BASE_URL` by using
    the manifest app and a disposable migrated database; an explicit loopback
    URL continues to work.
