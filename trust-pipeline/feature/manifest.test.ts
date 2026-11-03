@@ -20,8 +20,9 @@ const createFeature = async (yaml: string) => {
   await writeFile(path.join(root, 'docs/features/INS-123/feature.yaml'), yaml)
 }
 
-const validManifest = `schemaVersion: 1
+const validManifest = `schemaVersion: 2
 id: INS-123
+app: blog
 title: Add comments
 state: ACCEPTED
 acceptance:
@@ -39,7 +40,27 @@ test('reads a valid feature manifest and its existing test path', {
   const manifest = await readManifest('INS-123', root)
 
   expect(manifest.id).toBe('INS-123')
+  expect(manifest.app).toBe('blog')
   expect(manifest.acceptance.tests).toEqual(['tests/comments.spec.ts'])
+})
+
+test('accepts the admin app', { tags: ['unit'] }, async () => {
+  await createFeature(validManifest.replace('app: blog', 'app: admin'))
+
+  expect((await readManifest('INS-123', root)).app).toBe('admin')
+})
+
+test('rejects v1 manifests and missing or unsupported apps', {
+  tags: ['unit'],
+}, async () => {
+  await createFeature(validManifest.replace('schemaVersion: 2', 'schemaVersion: 1'))
+  await expect(readManifest('INS-123', root)).rejects.toThrow(/schemaVersion/i)
+
+  await createFeature(validManifest.replace('app: blog\n', ''))
+  await expect(readManifest('INS-123', root)).rejects.toThrow(/app/i)
+
+  await createFeature(validManifest.replace('app: blog', 'app: storefront'))
+  await expect(readManifest('INS-123', root)).rejects.toThrow(/app/i)
 })
 
 test('rejects missing manifest and mismatched manifest id', {

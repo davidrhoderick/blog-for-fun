@@ -43,15 +43,15 @@
 - Export `FeatureApp = 'admin' | 'blog'`.
 - `FeatureManifest` uses `schemaVersion: 2` and a required top-level `app: FeatureApp`; preserve the existing acceptance fields and validation.
 
-- [ ] **Step 1: Add failing manifest cases** — a v2 manifest with `app: blog` is accepted; `app: admin` is accepted; v1, missing `app`, and any other app value are rejected.
-- [ ] **Step 2: Run the focused test and confirm it fails on the old schema.**
+- [x] **Step 1: Add failing manifest cases** — a v2 manifest with `app: blog` is accepted; `app: admin` is accepted; v1, missing `app`, and any other app value are rejected.
+- [x] **Step 2: Run the focused test and confirm it fails on the old schema.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/manifest.test.ts`
 
 Expected: FAIL because the parser currently accepts only schema version 1 and does not validate `app`.
 
-- [ ] **Step 3: Implement schema v2 and app validation** in `manifest.ts`; keep the existing SHA, tag, and safe test-path checks intact.
-- [ ] **Step 4: Re-run the focused manifest tests.**
+- [x] **Step 3: Implement schema v2 and app validation** in `manifest.ts`; keep the existing SHA, tag, and safe test-path checks intact.
+- [x] **Step 4: Re-run the focused manifest tests.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/manifest.test.ts`
 

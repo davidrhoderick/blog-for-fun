@@ -2,9 +2,12 @@ import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { parse } from 'yaml'
 
+export type FeatureApp = 'admin' | 'blog'
+
 export type FeatureManifest = {
-  schemaVersion: 1
+  schemaVersion: 2
   id: string
+  app: FeatureApp
   state?: string
   acceptance: {
     acceptedSha: string
@@ -33,8 +36,10 @@ export async function readManifest(
 
   const manifest = value as Partial<FeatureManifest>
   const acceptance = manifest.acceptance
-  if (manifest.schemaVersion !== 1) throw new Error('Unsupported schemaVersion')
+  if (manifest.schemaVersion !== 2) throw new Error('Unsupported schemaVersion')
   if (manifest.id !== id) throw new Error(`Feature manifest ID must be ${id}`)
+  if (manifest.app !== 'admin' && manifest.app !== 'blog')
+    throw new Error('Feature manifest app must be admin or blog')
   if (!acceptance || !sha.test(acceptance.acceptedSha))
     throw new Error('Feature manifest requires a full accepted SHA')
   if (acceptance.playwrightTag !== `@feature-${id}`)
