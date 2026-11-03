@@ -67,22 +67,22 @@ Expected: PASS, including existing traversal and accepted-SHA cases.
 - Test: `apps/server/src/auth/auth.integration.test.ts`
 
 **Interface:**
-- Export `withManagedEnvironment<T>(options, run)`: options contain the worktree root, `app`, absolute local `databasePath`, and whether to remove that DB after the callback; `run` receives `{ baseURL, env }`.
+- Export `withManagedEnvironment<T>(options, run)`: options contain the worktree root, `app`, absolute local `databasePath`, whether to remove that DB after the callback, and optional server/app port overrides for isolated tests; `run` receives `{ baseURL, env }`.
 - It passes explicit file-DB credentials to migrations/server children, bootstraps the local admin only when no authentication user exists, starts the server plus selected app, waits for both health endpoints, calls `run`, and cleans up owned processes in `finally`. Product uses a persistent ignored DB; E2E uses a temporary DB.
 - Product database path is `apps/server/.local/product-<ID>.db`; E2E creates a temporary OS temp directory and removes only that directory after the run.
 - Extend `bootstrapAdministrator(input, { ifInitialized: true })` to return `null` without changing an existing account; preserve the current throwing behavior when the option is omitted. `bootstrap-auth.ts` enables that option only when `BOOTSTRAP_IF_INITIALIZED=true`.
 - Provide a small `environment.ts run --app ... --database ... -- <command>` CLI mode so the JavaScript worktree launcher can run `pnpm product` inside the same lifecycle.
 
-- [ ] **Step 1: Add failing tests**: in the server integration test, bootstrap once then assert `ifInitialized` returns `null` and preserves the account; in the environment test, use a temporary root and stub `pnpm` to verify local DB env reaches migration/bootstrap, the right UI is selected (`admin` → 3001, `blog` → 3000), health readiness is awaited, and `finally` terminates only spawned children.
-- [ ] **Step 2: Run the focused tests and confirm the new behavior is missing.**
+- [x] **Step 1: Add failing tests**: in the server integration test, bootstrap once then assert `ifInitialized` returns `null` and preserves the account; in the environment test, use a temporary root and stub `pnpm` to verify local DB env reaches migration/bootstrap, the right UI is selected (`admin` → 3001, `blog` → 3000), health readiness is awaited, and `finally` terminates only spawned children.
+- [x] **Step 2: Run the focused tests and confirm the new behavior is missing.**
 
 Run: `pnpm --filter server exec vitest run src/auth/auth.integration.test.ts` and `pnpm --filter trust-pipeline exec vitest run feature/environment.test.ts`
 
 Expected: FAIL because the idempotent bootstrap option and `environment.ts` do not exist.
 
-- [ ] **Step 3: Implement the helper** with Node child processes, loopback health checks, local file DB values, an idempotent first-admin bootstrap check, and signal-safe cleanup. Refuse an existing non-local server environment; do not overwrite `.env` or kill an occupied port's owner.
-- [ ] **Step 4: Extend tests for resuming an initialized DB and port collision.** Assert an existing administrator is not bootstrapped again and a port collision leaves the unrelated process running.
-- [ ] **Step 5: Run both focused test files.**
+- [x] **Step 3: Implement the helper** with Node child processes, loopback health checks, local file DB values, an idempotent first-admin bootstrap check, and signal-safe cleanup. Refuse an existing non-local server environment; do not overwrite `.env` or kill an occupied port's owner.
+- [x] **Step 4: Extend tests for resuming an initialized DB and port collision.** Assert an existing administrator is not bootstrapped again and a port collision leaves the unrelated process running.
+- [x] **Step 5: Run both focused test files.**
 
 Run: `pnpm --filter server exec vitest run src/auth/auth.integration.test.ts` and `pnpm --filter trust-pipeline exec vitest run feature/environment.test.ts`
 

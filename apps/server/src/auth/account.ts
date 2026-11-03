@@ -109,6 +109,7 @@ type BootstrapAdministratorInput = {
 
 export const bootstrapAdministrator = async (
   input: BootstrapAdministratorInput,
+  options: { ifInitialized?: boolean } = {},
 ) => {
   const email = validateEmail(input.email)
   const displayName = input.displayName.trim()
@@ -117,9 +118,10 @@ export const bootstrapAdministrator = async (
   const passwordHash = await hashPassword(input.password)
   const authUserId = crypto.randomUUID()
 
-  await db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [result] = await tx.select({ value: count() }).from(authUsers)
     if (result.value !== 0) {
+      if (options.ifInitialized) return false
       throw new Error(
         'Bootstrap refused because an authentication user already exists',
       )
@@ -142,7 +144,8 @@ export const bootstrapAdministrator = async (
       eventType: 'administrator.bootstrapped',
       metadata: {},
     })
+    return true
   })
 
-  return authUserId
+  return created ? authUserId : null
 }

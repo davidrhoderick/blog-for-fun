@@ -99,6 +99,25 @@ test('bootstrap creates one explicit administrator and cannot run twice', {
   )
 })
 
+test('bootstrap-if-initialized skips without changing the existing account', {
+  tags: ['integration'],
+}, async () => {
+  const [before] = await db.select().from(authPasswordCredentials)
+
+  await expect(
+    bootstrapAdministrator(
+      {
+        ...administrator,
+        password: 'replacement password must not be used',
+      },
+      { ifInitialized: true },
+    ),
+  ).resolves.toBeNull()
+
+  const [after] = await db.select().from(authPasswordCredentials)
+  expect(after).toEqual(before)
+})
+
 test('login uses a secure opaque cookie and stores only its hash', {
   tags: ['integration'],
 }, async () => {

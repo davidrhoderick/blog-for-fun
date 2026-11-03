@@ -11,10 +11,17 @@ const administratorPassword =
   process.env.BOOTSTRAP_PASSWORD ??
   (await password({ message: 'Password:', mask: '*' }))
 
-const authUserId = await bootstrapAdministrator({
-  email,
-  displayName,
-  password: administratorPassword,
-})
+const authUserId = await bootstrapAdministrator(
+  {
+    email,
+    displayName,
+    password: administratorPassword,
+  },
+  { ifInitialized: process.env.BOOTSTRAP_IF_INITIALIZED === 'true' },
+)
 
-console.info(`Bootstrapped administrator ${authUserId}`)
+console.info(
+  authUserId
+    ? `Bootstrapped administrator ${authUserId}`
+    : 'Administrator already initialized; skipping bootstrap',
+)
