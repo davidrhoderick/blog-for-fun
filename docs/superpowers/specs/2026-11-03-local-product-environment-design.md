@@ -13,9 +13,23 @@ interface.
 ## Goal
 
 Let a product team member start an isolated local feature session with one
-command. Scripts own repeatable Git and environment operations; `product-dev`
-remains responsible for interactive product behavior, not infrastructure
-guesswork.
+command, supplying only a feature ID and target app. Scripts own repeatable Git
+and environment operations; `product-dev` remains responsible for interactive
+product behavior, not infrastructure guesswork. Technical failures and setup
+workarounds go to engineering, not back to product as implementation questions.
+
+## Branch and base policy
+
+- This automation branch is intentionally stacked on
+  `verification-first-engineering-agent`, because that branch contains the
+  feature workflow being extended.
+- For product features, the default base is the latest fetched `origin/main`.
+  The workflow tooling must be merged to `main` before the normal launcher is
+  used. It must not silently substitute the current branch if `main` lacks the
+  launcher.
+- Stacking a product feature on another branch is an explicit choice. The
+  launcher reports the exact base SHA before creating the worktree. It never
+  rebases an existing branch.
 
 ## Proposed interface
 
@@ -24,14 +38,13 @@ pnpm product:feature --id BLOG-123 --app blog
 ```
 
 The root command is a Node.js standard-library script so it can run before
-workspace dependencies are installed. It fetches `origin/main` and creates
-branch `product/<id>` at
-`.worktrees/<id>`, then provisions the local app environment, starts the server
-and selected UI, checks readiness, and launches the existing `pnpm product`
-session in that worktree. `--app` accepts `admin` or `blog`. An optional
-`--base-ref` supports deliberate stacking and local testing; the default is the
-latest fetched `origin/main`. While developing this helper before it is merged,
-test it with `--base-ref HEAD` so the new worktree contains the helper.
+workspace dependencies are installed. It fetches the selected base and creates
+branch `product/<id>` at `.worktrees/<id>`, then provisions the local app
+environment, starts the server and selected UI, checks readiness, and launches
+the existing `pnpm product` session in that worktree. `--app` accepts `admin`
+or `blog`. An optional `--base-ref` is for explicit stacking; the normal default
+is the latest fetched `origin/main`. While developing this helper before it is
+merged, test it with `--base-ref HEAD` so the new worktree contains the helper.
 
 The launcher must not rebase or modify the invoking worktree. It fails clearly
 if its target branch/worktree already exists or the requested base cannot be
@@ -41,6 +54,15 @@ the feature worktree and local database for resuming work.
 
 ## Environment behavior
 
+- In order: create the worktree, run `pnpm install --frozen-lockfile`, run
+  `VERIFY_BASE_REF=<selected-base> pnpm verify`, provision and migrate the local
+  database, start the server and selected UI, verify readiness, then launch the
+  product agent. If baseline verification fails, stop before product work and
+  report the failure to engineering; product should not have to diagnose it.
+- Check `git status` before and after baseline verification. Never clean or reset
+  generated/user changes automatically. If verification requires the pipeline's
+  `JEV_API_KEY` and it is unavailable, report that as an engineering setup
+  prerequisite rather than asking product to troubleshoot it.
 - Create `apps/server/.env` in the new worktree only when absent. Use a local
   file-backed database and local-only credentials; never copy or overwrite the
   user's existing environment. Refuse any setup that would target a non-local
@@ -86,19 +108,25 @@ silently inferred by the launcher.
   avoid asking product to configure the repository.
 - Update engineering instructions so precheck/E2E use the managed environment
   by default and retain the explicit external URL override.
+- At product handoff, list any temporary tracked local-override changes and
+  their purpose. The engineering agent classifies each one: make a necessary
+  change durable with tests, or remove it with a targeted change and verify the
+  app still works. Include the decision in the handoff/PR comments; never
+  discard such changes silently or ask product to solve the technical issue.
 - Preserve accepted E2E files; do not add runtime SHA comparisons.
 
 ## Acceptance checks
 
 1. From a fresh checkout, the launcher fetches `origin/main`, creates
-   `product/<id>` in `.worktrees/<id>`, and starts the selected app against a
-   local file database without editing the invoking worktree or requiring the
-   user to configure `.env`.
+   `product/<id>` in `.worktrees/<id>`, installs dependencies, and runs baseline
+   verification before product changes. It does not edit the invoking worktree
+   or require the user to configure `.env`.
 2. Migrations run against that local database; bootstrap credentials are
    local-only and bootstrap runs once for each fresh database.
-3. Health checks pass before the product agent launches. An occupied port,
-   existing branch/path, invalid ID/app, or non-local database fails safely
-   without deleting or rewriting user state.
+3. The server and selected app start only after migrations. Health checks pass
+   before the product agent launches. An occupied port, existing branch/path,
+   invalid ID/app, or non-local database fails safely without deleting or
+   rewriting user state.
 4. Ctrl-C stops only launcher-owned processes and leaves the worktree/database
    available to resume. A repeated launch reuses the database and does not run
    first-admin bootstrap again.
@@ -107,12 +135,15 @@ silently inferred by the launcher.
    URL continues to work.
 6. Existing tests pass, new setup behavior has focused tests, accepted E2E
    files are unchanged, and `pnpm verify` passes.
+7. Every temporary tracked override is listed at handoff and has an explicit
+   engineering disposition in the eventual PR/comments.
 
 ## Not in scope
 
 - Rebasing a user's active branch or resolving Git conflicts automatically.
 - Production/shared database access, Docker setup, or arbitrary seed shell
   commands from feature manifests.
+- Silent stacking on a non-main branch or automatic rebasing.
 - Changing product-approved browser behavior or adding speculative E2E cases.
 - Capturing GraphQL or Drizzle traffic; the current capture remains Playwright
   trace/video/screenshot output.
