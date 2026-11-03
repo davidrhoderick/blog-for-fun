@@ -7,3 +7,7 @@ reason = "fs@0.0.1-security is npm's security-holding placeholder pulled in by t
 [[IgnoredVulns]]
 id = "GHSA-gcqx-w48m-w2h4"
 reason = "deepmerge has no patched release; it is reachable only through admin's dev-only shadcn toolchain, not production dependencies"
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+reason = "minimatch is reachable only through dev-only codegen, shadcn, and architecture tooling; OSV lists only a v11 fix, which would force a major across these toolchains"

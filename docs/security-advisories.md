@@ -27,12 +27,13 @@ would need the same treatment as `braces`.
 
 ## OSV-only accepted finding
 
-OSV Scanner reports every severity, so an unpatched low-severity development-
-tool finding is recorded here and in `osv-scanner.toml` with a narrow ignore.
+OSV Scanner reports every severity, so accepted development-tool findings are
+recorded here and in `osv-scanner.toml` with narrow ignores.
 
 | GHSA | Package | Severity | Why accepted |
 |---|---|---|---|
 | GHSA-gcqx-w48m-w2h4 | `deepmerge` | low | No patched release is published. It is reachable only through the admin dev-only `shadcn` toolchain and is not a production dependency. Revisit when a fix is released. |
+| GHSA-g3hv-75wg-m249 | `minimatch` | moderate | Reachable only through dev-only GraphQL codegen, shadcn, and architecture-test tooling. OSV lists a fix at v11.0.1, which would force a major upgrade across these toolchains. Revisit when compatible upstream releases are available. |
 
 ## Already cleared
 
