@@ -262,6 +262,34 @@ test('refuses a non-local storage endpoint before running migrations', {
   await expect(readFile(log, 'utf8')).rejects.toThrow()
 })
 
+test('stops owned services and removes a disposable DB when the callback fails', {
+  tags: ['integration'],
+}, async () => {
+  const { log } = await setup()
+  const databasePath = path.join(root, 'temporary', 'feature.db')
+  const ports = { server: await freePort(), app: await freePort() }
+
+  await expect(
+    withManagedEnvironment(
+      {
+        root,
+        app: 'blog',
+        databasePath,
+        removeDatabase: true,
+        ports,
+      },
+      async () => {
+        throw new Error('Playwright failed')
+      },
+    ),
+  ).rejects.toThrow('Playwright failed')
+
+  await expect(readFile(databasePath, 'utf8')).rejects.toThrow()
+  expect(
+    (await events(log)).filter((event) => event.kind === 'stopped'),
+  ).toHaveLength(2)
+})
+
 test('stops managed services when interrupted', {
   tags: ['integration'],
 }, async () => {

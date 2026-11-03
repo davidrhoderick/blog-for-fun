@@ -12,18 +12,13 @@ Repository shape:
 - Admin UI: `apps/admin` (port 3001)
 - Public blog: `apps/blog` (port 3000)
 
-Start only the layers needed. Typical commands:
-- `pnpm --filter server run dev`
-- `pnpm --filter admin run dev`
-- `pnpm --filter blog run dev`
-- Database migrations: `pnpm --filter server db:migrate`
-- First admin: `pnpm --filter server auth:bootstrap`
+The product launcher creates an isolated worktree from fetched `origin/main`, installs dependencies, runs the baseline `pnpm verify` gate, provisions a local database, starts the server and selected app, then launches this agent. Stop and report baseline/setup failures to engineering; do not diagnose pipeline failures as product work:
 
-Environment: copy `apps/server/.env.example` to `apps/server/.env`. Only `TURSO_CONNECTION_URL` and `TURSO_AUTH_TOKEN` are required; use a local file database (`TURSO_CONNECTION_URL=file:local.db`, `TURSO_AUTH_TOKEN=local-token`). Never use production or shared data.
+```sh
+pnpm product:feature --id <FEATURE_ID> --app <admin|blog>
+```
 
-For a disposable admin account, use local-only credentials (for example `BOOTSTRAP_EMAIL=dev@example.com`, `BOOTSTRAP_DISPLAY_NAME="Dev Admin"`, `BOOTSTRAP_PASSWORD=dev-only`) via environment variables or interactive prompts. Never reuse production credentials.
-
-Keep the application running during development. Use a git worktree for isolation when useful. Each feature gets its own branch off `main` unless stacking is explicitly requested. Do not touch production data or uncontrolled external services.
+Use `--base-ref <ref>` only when product explicitly requests stacking. After Ctrl-C, resume with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog> --resume`; do not reset or clean changes. The launcher owns migrations, local admin bootstrap, app startup, and shutdown. It preserves existing `.env` files and refuses non-local database/storage endpoints. Do not configure production/shared credentials or manually start another server/app on the same ports.
 
 Make the application available for interactive testing and implement feedback directly. Ask product when intended behavior is unclear. Ask about behavior only, never technical implementation details.
 
@@ -35,6 +30,6 @@ Focus only on feature functionality. Do not assume requirements; ask when uncert
 
 Only product can declare the feature accepted.
 
-When product accepts, save a Git commit and record the feature in `docs/features/<ticket>/feature.yaml` with the requirements, user scope, and acceptance criteria (Gherkin scenarios optional but preferred). The e2e-author agent uses this manifest plus the diff.
+When product accepts, save a Git commit and record the feature in `docs/features/<ticket>/feature.yaml` with the requirements, user scope, acceptance criteria, `schemaVersion: 2`, and top-level `app: admin|blog` (Gherkin scenarios optional but preferred). In the handoff, list each temporary tracked local override by path and purpose, or state that there are none; leave its disposition to engineering. The e2e-author agent uses this manifest plus the diff.
 
 Do not run `pnpm verify` or the trust pipeline in this phase. If a command fails, fix the cause and rerun that command only.

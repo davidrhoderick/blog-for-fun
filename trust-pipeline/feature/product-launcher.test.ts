@@ -120,7 +120,7 @@ test('creates from fetched main and gates launch on baseline verification', {
     ['--id', 'INS-123', '--app', 'blog'],
     {
       TURSO_CONNECTION_URL: 'libsql://production.example',
-      TURSO_AUTH_TOKEN: 'production-db-secret',
+      TURSO_AUTH_TOKEN: 'test-token',
       AWS_ACCESS_KEY_ID: 'cloud-key',
       AWS_SECRET_ACCESS_KEY: 'cloud-secret',
       AWS_ENDPOINT_URL_S3: 'https://storage.example',

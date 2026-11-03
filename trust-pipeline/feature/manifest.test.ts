@@ -53,7 +53,9 @@ test('accepts the admin app', { tags: ['unit'] }, async () => {
 test('rejects v1 manifests and missing or unsupported apps', {
   tags: ['unit'],
 }, async () => {
-  await createFeature(validManifest.replace('schemaVersion: 2', 'schemaVersion: 1'))
+  await createFeature(
+    validManifest.replace('schemaVersion: 2', 'schemaVersion: 1'),
+  )
   await expect(readManifest('INS-123', root)).rejects.toThrow(/schemaVersion/i)
 
   await createFeature(validManifest.replace('app: blog\n', ''))

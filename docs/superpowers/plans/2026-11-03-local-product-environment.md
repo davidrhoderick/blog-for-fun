@@ -133,23 +133,23 @@ Expected: PASS; base and collision cases leave the invoking checkout untouched, 
 - Without it, read `manifest.app`, create a fresh temporary local DB, run migrations/bootstrap, run only selected tests, then stop owned processes and delete only that run's DB.
 - Product handoff lists temporary tracked overrides; engineering owns their disposition. Accepted Playwright files remain unchanged.
 
-- [ ] **Step 1: Add failing CLI tests** asserting: no `FEATURE_BASE_URL` starts the manifest-selected app and runs selected tagged tests; a supplied loopback URL bypasses managed startup; invalid app or zero selected tests fails before launching tests; cleanup runs on both pass and failure.
-- [ ] **Step 2: Run the focused test and confirm the managed path is absent.**
+- [x] **Step 1: Add failing CLI tests** asserting: no `FEATURE_BASE_URL` starts the manifest-selected app and runs selected tagged tests; a supplied loopback URL bypasses managed startup; invalid app or zero selected tests fails before launching tests; cleanup runs on both pass and failure.
+- [x] **Step 2: Run the focused test and confirm the managed path is absent.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/cli.test.ts`
 
 Expected: FAIL because feature tests currently require `FEATURE_BASE_URL`.
 
-- [ ] **Step 3: Integrate `withManagedEnvironment` into precheck/E2E** only when the external URL is absent. Keep capture artifacts and feature test selection unchanged.
-- [ ] **Step 4: Run the focused CLI and manifest tests.**
+- [x] **Step 3: Integrate `withManagedEnvironment` into precheck/E2E** only when the external URL is absent. Keep capture artifacts and feature test selection unchanged.
+- [x] **Step 4: Run the focused CLI and manifest tests.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/cli.test.ts feature/manifest.test.ts`
 
 Expected: PASS for managed and explicit external-loopback paths.
 
-- [ ] **Step 5: Replace setup instructions with the launcher command** and document the base policy, baseline verify gate, local migration/health readiness, and engineering-owned local-override handoff in the listed agent/docs files.
-- [ ] **Step 6: Run the full trust pipeline and inspect the accepted E2E diff.**
+- [x] **Step 5: Replace setup instructions with the launcher command** and document the base policy, baseline verify gate, local migration/health readiness, and engineering-owned local-override handoff in the listed agent/docs files.
+- [x] **Step 6: Run the full trust pipeline and inspect the accepted E2E diff.**
 
-Run: `VERIFY_BASE_REF=main pnpm verify`
+Run: `pnpm verify` (default review base is `HEAD`, the Task 4 base for this uncommitted diff).
 
-Expected: all stages pass; existing accepted Playwright files have no diff; only the documented CSS specificity warning remains.
+Expected: all stages pass; existing accepted Playwright files have no diff; only the documented CSS specificity warning remains. Do not set `VERIFY_BASE_REF=main` on this branch: it includes the stacked parent branch and exceeds Jev's request limit.

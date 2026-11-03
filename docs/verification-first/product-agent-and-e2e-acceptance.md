@@ -11,7 +11,7 @@ After product accepts the feature, record its behavior as executable E2E tests.
 
 Verify the tests in a fresh environment. Preserve the tests as the functional contract for the engineering phase.
 
-**This process must prioritize functional delivery. It must not require engineering review or the trust pipeline before product acceptance.** Launch it with `pnpm product`, which opens OpenCode with the `product-dev` agent as the default; the pipeline plugin skips the trust pipeline for that agent automatically. `OPENCODE_PRODUCT_MODE=1` remains an optional override.
+**This process must prioritize functional delivery. Product changes do not run the trust pipeline before acceptance; the launcher does run a clean-baseline `pnpm verify` preflight before product work starts.** Launch it with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`, which prepares the managed worktree and then opens OpenCode with the `product-dev` agent as the default. The pipeline plugin skips the trust pipeline for that agent automatically. `OPENCODE_PRODUCT_MODE=1` remains an optional override.
 
 ## 2. Scope
 
@@ -46,8 +46,8 @@ Do not introduce a new coding agent or test framework when an existing tool meet
 
 ### Initial setup
 
-1. Copy `apps/server/.env.example` to `apps/server/.env`. Use a local database (`TURSO_CONNECTION_URL=file:local.db`, `TURSO_AUTH_TOKEN=local-token`); never point product work at a live/shared database.
-2. The Playwright MCP server is configured in `.opencode/opencode.json` (see below).
+1. Start product work with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`. The launcher creates an isolated worktree from fetched `origin/main`, installs frozen dependencies, runs baseline `pnpm verify`, and starts a local database plus the selected app. Stop and report baseline/setup failures to engineering. Use `--base-ref <ref>` only for explicitly requested stacking. While this tooling is unmerged, use `--base-ref HEAD` to test it.
+2. The launcher creates `apps/server/.env` only when absent and never overwrites it. It uses local-only database credentials and refuses non-local database or storage endpoints. Do not copy credentials from another environment.
 3. Configure the Playwright MCP server in `.opencode/opencode.json`:
 
 ```jsonc
@@ -67,32 +67,26 @@ Do not introduce a new coding agent or test framework when an existing tool meet
 
 Each feature uses the repository's existing application profile.
 
-Commands:
-
-| Layer | Command | Port | Health check |
-| --- | --- | --- | --- |
-| GraphQL API | `pnpm --filter server run dev` | 4000 | `GET http://127.0.0.1:4000/health` |
-| Admin UI | `pnpm --filter admin run dev` | 3001 | Vite dev server |
-| Public blog | `pnpm --filter blog run dev` | 3000 | Vite dev server |
+The launcher starts the GraphQL API at `http://127.0.0.1:4000` and only the
+selected UI: admin at `http://127.0.0.1:3001` or blog at
+`http://127.0.0.1:3000`. It waits for `GET /health` and the UI to respond before
+launching the product agent. Do not start duplicate processes on those ports.
 
 Database and bootstrap:
 
-- Migrations: `pnpm --filter server db:migrate`
-- First administrator: `pnpm --filter server auth:bootstrap`
-- Media storage (optional): `pnpm --filter server storage:dev` (MinIO on 9000/9001) plus the storage block in `apps/server/.env`
+- The managed launcher runs migrations and creates a disposable local admin when needed.
+- For engineering-only local media work, start MinIO with `pnpm --filter server storage:dev` and configure loopback storage values in `apps/server/.env`.
 - Codegen (if schema changes): `pnpm codegen`
 - Seeding: there is no general seed script. Only the administrator account is bootstrapped; create any test posts/content manually or during QA.
 
 Environment requirements:
 
-- Start a disposable development environment for each feature using an OpenCode worktree.
-- Run the server against a local libSQL file (`TURSO_CONNECTION_URL=file:local.db`) so no production data is touched.
-- Reset a disposable database by deleting the local DB file and rerunning `pnpm --filter server db:migrate` (and `auth:bootstrap` if needed).
-- For a shared/remote Turso database, create a separate database or branch per feature instead of reusing production data.
-- Provide a browser-accessible URL for admin (3001) and/or blog (3000).
+- Start a disposable development environment for each feature with `pnpm product:feature`; it owns the worktree, local database, migrations, and app processes.
+- Resume after Ctrl-C with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog> --resume`. Do not reset or clean the managed worktree.
+- Do not point product or managed E2E work at any shared or remote Turso database; managed runs use local file databases only.
 - Preserve development state during interactive work.
 - Prevent access to production data and irreversible external operations.
-- Use a separate, clean environment for final acceptance-test recording and replay: fresh database file, migrations, and deterministic test data.
+- Final acceptance replay uses a separate managed environment with a fresh database file and migrations.
 
 Feature flags: this repository has no feature-flag provider yet. For this phase, either keep the change small enough to ship directly or gate it with a simple server-side flag (environment variable or database row). Flag retirement and broader rollout remain engineering work.
 
@@ -130,7 +124,7 @@ Store the validated requirements with the ticket.
 
 ### Stage B — Interactive development
 
-Start the disposable development environment (worktree, local database, migrations).
+Start the disposable development environment with `pnpm product:feature`; the launcher owns the worktree, local database, migrations, and app processes.
 
 Start an OpenCode session with the `product-dev` agent and access to source files, terminal, application logs, and browser tools.
 
@@ -144,17 +138,18 @@ Keep the same session and workspace until product accepts the feature.
 
 When product selects **Accept Feature**:
 
-- Save the current implementation to a Git commit on a new branch off `main` (stacking only if explicitly requested).
+- Save the current implementation to a Git commit on the managed `product/<FEATURE_ID>` branch created from fetched `origin/main` (stacking only if explicitly requested).
 - Record the accepted revision (commit SHA).
 - Write a feature manifest at `docs/features/<ticket>/feature.yaml` with requirements, user scope, and acceptance criteria (Gherkin scenarios preferred). Use the schema and fields in the [engineering workflow specification](./engineering-agent-and-trust-pipeline-acceptance.md).
 - Record the feature requirements and environment configuration.
+- List temporary tracked local overrides by path and purpose, or state none; engineering decides whether to keep each with tests or remove it with a targeted change and records that disposition in the PR.
 - Prevent later changes to the accepted implementation without a new revision.
 
 ### Stage C — Record accepted behavior
 
-Create a fresh environment from the accepted revision.
-
-Run migrations and load the required fixtures.
+Use the running app from the managed product session to record the accepted
+interactions. After the manifest lists the authored tests, use
+`pnpm feature:precheck --id <FEATURE_ID> --capture` for a fresh managed replay.
 
 Use Playwright MCP and/or Playwright codegen to record user interactions, then refine the recorded output into stable, reviewed tests.
 
@@ -181,11 +176,10 @@ Do not automatically add speculative edge cases.
 
 Save the completed tests.
 
-Destroy the recording environment.
-
-Create another environment from the same accepted revision.
-
-Run migrations, load fixtures, and execute the recorded E2E tests.
+Run `pnpm feature:precheck --id <FEATURE_ID> --capture`. The CLI reads the app
+from the manifest, migrates a disposable local database, and removes its
+temporary directory. Set `FEATURE_BASE_URL=http://127.0.0.1:<port>` only when
+intentionally using an externally started loopback app.
 
 If a test fails:
 
@@ -282,7 +276,7 @@ Show proposed assertions to product for approval.
 
 Do not change approved expected behavior.
 
-Run the tests against a fresh environment with `pnpm e2e` and report failures accurately.
+Run the accepted tests with `pnpm feature:precheck --id <FEATURE_ID>` or `pnpm feature:e2e --id <FEATURE_ID>`. These commands use a fresh managed local environment by default. Set `FEATURE_BASE_URL` to a loopback URL only when intentionally using an externally started app.
 
 Do not hide failed tests or weaken assertions to obtain a passing result.
 
@@ -364,7 +358,7 @@ Build the first version in four increments.
 
 **Increment 1 — Interactive development**
 
-Use `pnpm product`, a Git worktree, a local Turso database file, and the running application (`pnpm --filter server run dev`, plus admin/blog as needed).
+Use `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>` to create the Git worktree, local database, and running application; the launcher starts `product-dev`.
 
 **Increment 2 — Product acceptance**
 

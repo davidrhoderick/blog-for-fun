@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { cleanRuns, createRunDirectory, markSuccessfulRun } from './artifacts'
+import { withManagedEnvironment } from './environment'
 import { type FeatureManifest, readManifest } from './manifest'
 import { parseFeatureOptions } from './options'
 import {
@@ -10,19 +13,48 @@ import {
   validateFeatureBaseURL,
 } from './playwright'
 
-const root = process.cwd()
-const artifactRoot = (id: string) =>
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+)
+const artifactRoot = (id: string, root = projectRoot) =>
   path.join(root, '.artifacts', 'features', id)
 
-async function runFeatureTests(
+function featureTestEnvironment(
+  source: NodeJS.ProcessEnv,
+  baseURL: string,
+  captureDirectory?: string,
+): NodeJS.ProcessEnv {
+  const env = { ...source }
+  for (const name of Object.keys(env)) {
+    if (/^AWS_/.test(name)) delete env[name]
+  }
+  delete env.JEV_API_KEY
+  delete env.FEATURE_CAPTURE_DIR
+  env.FEATURE_BASE_URL = baseURL
+  if (captureDirectory) env.FEATURE_CAPTURE_DIR = captureDirectory
+  return env
+}
+
+function externalTestEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  for (const name of Object.keys(env)) {
+    if (/^TURSO_/.test(name)) delete env[name]
+  }
+  return env
+}
+
+export async function runFeatureTests(
   id: string,
   stage: 'precheck' | 'e2e',
   capture: boolean,
+  root = projectRoot,
 ): Promise<void> {
   const manifest = await readManifest(id, root)
   const configuredBaseURL = process.env.FEATURE_BASE_URL
-  if (!configuredBaseURL) throw new Error('FEATURE_BASE_URL is required')
-  const baseURL = validateFeatureBaseURL(configuredBaseURL)
+  const externalBaseURL = configuredBaseURL
+    ? validateFeatureBaseURL(configuredBaseURL)
+    : undefined
   const grep = featureGrep(manifest.acceptance.playwrightTag)
   const selected = selectFeatureTests(
     execFileSync(
@@ -41,15 +73,48 @@ async function runFeatureTests(
     id,
     manifest.acceptance.playwrightTag,
   )
-  await executeFeatureTests({
-    id,
-    stage,
-    capture,
-    manifest,
-    grep,
-    baseURL,
-    selectedCount: selected.length,
-  })
+  if (externalBaseURL) {
+    await executeFeatureTests({
+      id,
+      stage,
+      capture,
+      manifest,
+      grep,
+      baseURL: externalBaseURL,
+      environment: externalTestEnvironment(),
+      environmentProfile: process.env.FEATURE_ENVIRONMENT_PROFILE ?? 'external',
+      selectedCount: selected.length,
+      root,
+    })
+    return
+  }
+
+  const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'feature-e2e-'))
+  try {
+    await withManagedEnvironment(
+      {
+        root,
+        app: manifest.app,
+        databasePath: path.join(temporaryDirectory, 'feature.db'),
+        removeDatabase: true,
+      },
+      ({ baseURL, env }) =>
+        executeFeatureTests({
+          id,
+          stage,
+          capture,
+          manifest,
+          grep,
+          baseURL,
+          environment: env,
+          environmentProfile: 'managed',
+          selectedCount: selected.length,
+          root,
+        }),
+    )
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true })
+  }
 }
 
 type FeatureTestRun = {
@@ -59,7 +124,10 @@ type FeatureTestRun = {
   manifest: FeatureManifest
   grep: string
   baseURL: string
+  environment: NodeJS.ProcessEnv
+  environmentProfile: string
   selectedCount: number
+  root: string
 }
 
 async function executeFeatureTests({
@@ -69,24 +137,25 @@ async function executeFeatureTests({
   manifest,
   grep,
   baseURL,
+  environment,
+  environmentProfile,
   selectedCount,
+  root,
 }: FeatureTestRun): Promise<void> {
   const run = capture ? await createRunDirectory(id, root) : undefined
-  const env = {
-    ...process.env,
-    FEATURE_BASE_URL: baseURL,
-    ...(run ? { FEATURE_CAPTURE_DIR: run.directory } : {}),
-  }
+  const env = featureTestEnvironment(environment, baseURL, run?.directory)
   const startedAt = new Date().toISOString()
   const result: TestResult = {
     featureId: id,
     stage,
-    sourceSha: execFileSync('git', ['rev-parse', 'HEAD']).toString().trim(),
+    sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root })
+      .toString()
+      .trim(),
     baselineSha: manifest.acceptance.acceptedSha,
     testCount: selectedCount,
     passed: selectedCount,
     failed: 0,
-    environmentProfile: process.env.FEATURE_ENVIRONMENT_PROFILE ?? 'external',
+    environmentProfile,
     artifactPaths: run ? [run.directory] : [],
     startedAt,
     finishedAt: new Date().toISOString(),
@@ -165,9 +234,10 @@ type TestResult = {
 async function prepareContractTestGeneration(
   id: string,
   runId?: string,
+  root = projectRoot,
 ): Promise<void> {
   const manifest = await readManifest(id, root)
-  const featureArtifacts = artifactRoot(id)
+  const featureArtifacts = artifactRoot(id, root)
   const latest = JSON.parse(
     await readFile(path.join(featureArtifacts, 'latest.json'), 'utf8'),
   ) as { runId: string }
@@ -206,6 +276,7 @@ async function prepareContractTestGeneration(
 }
 
 async function main(): Promise<void> {
+  const root = projectRoot
   const [command, ...args] = process.argv.slice(2)
   const parsed = parseFeatureOptions(args)
   switch (command) {
@@ -214,10 +285,10 @@ async function main(): Promise<void> {
       return
     case 'precheck':
     case 'e2e':
-      await runFeatureTests(parsed.id, command, parsed.capture === true)
+      await runFeatureTests(parsed.id, command, parsed.capture === true, root)
       return
     case 'generate-tests':
-      await prepareContractTestGeneration(parsed.id, parsed.run)
+      await prepareContractTestGeneration(parsed.id, parsed.run, root)
       return
     case 'clean':
       await cleanRuns(parsed.id, parsed.keep ?? 3, root)
@@ -225,7 +296,7 @@ async function main(): Promise<void> {
     case 'status': {
       const manifest = await readManifest(parsed.id, root)
       const latestContents = await readFile(
-        path.join(artifactRoot(parsed.id), 'latest.json'),
+        path.join(artifactRoot(parsed.id, root), 'latest.json'),
         'utf8',
       ).catch((error: NodeJS.ErrnoException) =>
         error.code === 'ENOENT' ? '' : Promise.reject(error),
@@ -253,7 +324,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exitCode = 1
-})
+if (
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
+) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  })
+}

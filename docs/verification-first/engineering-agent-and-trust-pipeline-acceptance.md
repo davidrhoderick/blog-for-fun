@@ -38,8 +38,9 @@ Use **one versioned feature manifest** to collect the definition, identity, Gher
 Example:
 
 ```yaml
-schemaVersion: 1
+schemaVersion: 2
 id: INS-123
+app: admin # required: admin or blog
 title: Add comments to posts
 state: ACCEPTED
 requirements:
@@ -145,7 +146,12 @@ A daily scheduled run can execute the full smoke suite and the broader regressio
 
 ### Capture during the successful precheck
 
-Start the accepted revision in a disposable host environment. Run migrations and the manifest's fixture or seed instructions. Enable capture. Execute **only** the feature's E2E tests. If any fail, stop before generating integration tests.
+Run the feature precheck in its managed host environment. The manifest's
+`app` selects the UI; the runner creates a disposable local database, migrates
+it, bootstraps a local admin, and starts only the server and selected app.
+Execute **only** the feature's E2E tests. If any fail, stop before generating
+integration tests. `FEATURE_BASE_URL` remains an optional loopback-only
+override when an external app is intentionally used.
 
 Enable durable capture with:
 
@@ -241,14 +247,14 @@ The generated tests must run quickly with no real database, no uncontrolled netw
 
 1. Read and validate the feature manifest.
 2. Verify the accepted SHA exists and the accepted E2E files have not changed without a new baseline.
-3. Create a disposable worktree and host environment at the accepted SHA.
-4. Run database migrations. Run the manifest's seed script when present. Bootstrap the administrator with non-interactive `BOOTSTRAP_*` variables.
+3. Run the managed feature precheck. It starts the server and manifest-selected app against a fresh temporary local database.
+4. Add only explicit, safe feature fixtures when required; the managed runner does not infer or execute arbitrary seed commands.
 5. Discover the accepted feature tests; **abort if none match**.
 6. Run only those tests, with browser, server, and database capture enabled.
 7. Stop on failure and report the cause to the engineer. Do not generate contract tests from a failed run.
-8. On success, store the redacted capture artifacts and destroy the worktree and host processes.
+8. On success, store the capture artifacts, then stop owned processes and remove only that run's temporary database directory.
 
-The environment uses host processes and a temporary libSQL file. Do not use Docker for the application. MinIO is the only container-based helper, and only when the feature uses media.
+The environment uses host processes and a temporary libSQL file. Do not use Docker for the application. MinIO is the only container-based helper, and only when the feature uses media. If the selected app's port is occupied, stop without killing its owner.
 
 ### Stage 2 — Generate integration tests
 
@@ -379,16 +385,19 @@ You are the engineering implementation agent.
 Read docs/features/<FEATURE_ID>/feature.yaml first.
 Treat the accepted SHA and Playwright acceptance tests as immutable.
 Do not alter product-approved expected browser behavior.
+Review the product handoff's temporary tracked local overrides. For each, either
+make the required behavior durable with tests or remove it with a targeted
+change and verify; record the disposition in the PR. Never discard one silently.
 
 Follow these stages in order:
 1. Run pnpm feature:validate --id <FEATURE_ID>.
-2. Run pnpm feature:precheck --id <FEATURE_ID> --capture in a new host environment.
+2. Run pnpm feature:precheck --id <FEATURE_ID> --capture. It uses the managed environment by default.
 3. Stop if no matching E2E tests exist or if any accepted test fails.
 4. Run pnpm feature:generate-tests --id <FEATURE_ID> --run latest.
 5. Invoke the contract-test-author subagent with the generation brief.
 6. Run pnpm verify and correct failures until green or blocked.
 7. Create Git commits for useful recovery points.
-8. Run pnpm feature:e2e --id <FEATURE_ID> in a new host environment.
+8. Run pnpm feature:e2e --id <FEATURE_ID>. It creates a fresh managed environment by default.
 9. If E2E fails, compare the implementation with the accepted SHA, repair, and verify again.
 10. Prepare one PR for human engineering review after all required checks pass.
 
@@ -454,13 +463,13 @@ Implement workflow transitions through deterministic scripts, not by trusting th
 
 ## 10. Script contracts
 
-These are proposed script interfaces to implement, **not commands that already exist**:
+These are the feature workflow script interfaces:
 
 ```sh
 pnpm feature:validate --id INS-123
-pnpm feature:precheck --id INS-123 --capture # new host env + migrate + seed + tagged E2E + capture
+pnpm feature:precheck --id INS-123 --capture # managed local env + tagged E2E + capture
 pnpm feature:generate-tests --id INS-123 --run latest
-pnpm feature:e2e --id INS-123                 # new host env + migrate + seed + tagged E2E
+pnpm feature:e2e --id INS-123                 # fresh managed local env + tagged E2E
 pnpm feature:clean --id INS-123 --keep 3      # remove old raw artifact runs
 pnpm feature:status --id INS-123
 pnpm verify
@@ -470,7 +479,7 @@ pnpm verify
 
 Each script must exit non-zero on failure and write machine-readable evidence. Minimum result fields: `featureId`, `stage`, `sourceSha`, `baselineSha`, `testCount`, `passed`, `failed`, `environmentProfile`, `artifactPaths`, `startedAt`, `finishedAt`, and `errorCategory` when blocked.
 
-Use a temporary libSQL file and unique ports per run. Always clean up host processes, temporary worktrees, and temporary databases on success or error. Check ports with `ss` before starting and kill only the process that owns the port. Do not use containers for the application; MinIO is the only container-based helper.
+Managed precheck/E2E uses a temporary libSQL file and fixed loopback app/server ports. Refuse occupied ports; never kill their owners. Always clean up only owned host processes and that run's temporary database directory on success or error. Do not use containers for the application; MinIO is the only container-based helper.
 
 Keep raw test artifacts long enough for debugging. `feature:clean` removes old run directories and never removes the manifest or committed fixtures. CI uploads raw artifacts with a retention period instead of committing them. Prevent commands from reaching production systems or secrets.
 
