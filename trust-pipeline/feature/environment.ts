@@ -19,7 +19,15 @@ export type ManagedEnvironmentOptions = {
   ports?: { server: number; app: number }
 }
 
-type ManagedEnvironment = { baseURL: string; env: NodeJS.ProcessEnv }
+type ManagedEnvironment = {
+  baseURL: string
+  env: NodeJS.ProcessEnv
+  runCommand: (
+    command: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ) => Promise<void>
+}
 type PreparedEnvironment = ManagedEnvironmentOptions & {
   root: string
   databasePath: string
@@ -111,11 +119,26 @@ function runCommand(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  children: ChildProcess[],
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, env, stdio: 'inherit' })
-    child.once('error', reject)
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      detached: process.platform !== 'win32',
+      stdio: 'inherit',
+    })
+    children.push(child)
+    const removeChild = () => {
+      const index = children.indexOf(child)
+      if (index !== -1) children.splice(index, 1)
+    }
+    child.once('error', (error) => {
+      removeChild()
+      reject(error)
+    })
     child.once('exit', (code, signal) => {
+      removeChild()
       if (code === 0) resolve()
       else reject(new Error(`${command} exited with ${signal ?? code}`))
     })
@@ -185,6 +208,7 @@ async function stopProcess(child: ChildProcess): Promise<void> {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
     }
+    await exited
   }
 }
 
@@ -203,6 +227,10 @@ export async function withManagedEnvironment<T>(
   const prepared = await prepareEnvironment(options)
   const children: ChildProcess[] = []
   let stopping: Promise<void> | undefined
+  let shutdownRequested = false
+  const assertRunning = () => {
+    if (shutdownRequested) throw new Error('Managed environment interrupted')
+  }
   const stop = () => {
     stopping ??= (async () => {
       for (const child of [...children].reverse()) await stopProcess(child)
@@ -210,29 +238,40 @@ export async function withManagedEnvironment<T>(
     return stopping
   }
   const onSignal = () => {
+    shutdownRequested = true
     void stop()
   }
 
-  process.once('SIGINT', onSignal)
-  process.once('SIGTERM', onSignal)
+  process.on('SIGINT', onSignal)
+  process.on('SIGTERM', onSignal)
   try {
+    assertRunning()
     await runCommand(
       'pnpm',
       ['--filter', 'server', 'db:migrate'],
       prepared.root,
       prepared.baseEnv,
+      children,
     )
+    assertRunning()
     await runCommand(
       'pnpm',
       ['--filter', 'server', 'auth:bootstrap'],
       prepared.root,
       prepared.baseEnv,
+      children,
     )
-    await startServices(prepared, children)
+    assertRunning()
+    await startServices(prepared, children, assertRunning)
+    assertRunning()
     console.info(`Local ${prepared.app} ready at ${prepared.baseURL}`)
     return await run({
       baseURL: prepared.baseURL,
       env: { ...prepared.appEnv, FEATURE_BASE_URL: prepared.baseURL },
+      runCommand: (command, args, env) => {
+        assertRunning()
+        return runCommand(command, args, prepared.root, env, children)
+      },
     })
   } finally {
     process.off('SIGINT', onSignal)
@@ -285,7 +324,9 @@ async function prepareEnvironment(
 async function startServices(
   environment: PreparedEnvironment,
   children: ChildProcess[],
+  assertRunning: () => void,
 ): Promise<void> {
+  assertRunning()
   const server = startProcess(
     ['--filter', 'server', 'run', 'dev'],
     environment.root,
@@ -297,6 +338,7 @@ async function startServices(
     server,
     'Server',
   )
+  assertRunning()
 
   const app = startProcess(
     [
@@ -339,9 +381,12 @@ async function runCommandLine(): Promise<void> {
   const scriptPath = fileURLToPath(import.meta.url)
   const root = path.resolve(path.dirname(scriptPath), '../..')
   const [command, ...commandArgs] = args.slice(separator + 1)
-  await withManagedEnvironment({ root, app, databasePath }, async ({ env }) => {
-    await runCommand(command, commandArgs, root, env)
-  })
+  await withManagedEnvironment(
+    { root, app, databasePath },
+    async ({ env, runCommand }) => {
+      await runCommand(command, commandArgs, env)
+    },
+  )
 }
 
 if (

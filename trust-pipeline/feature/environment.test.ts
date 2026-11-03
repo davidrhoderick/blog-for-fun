@@ -56,19 +56,27 @@ const kind = args.includes('db:migrate') ? 'migrate'
 const log = (event) => appendFileSync(process.env.MANAGED_ENV_TEST_LOG, JSON.stringify(event) + '\\n')
 log({ kind, url: process.env.TURSO_CONNECTION_URL, token: process.env.TURSO_AUTH_TOKEN, bootstrap: process.env.BOOTSTRAP_IF_INITIALIZED, port: process.env.PORT, awsKey: process.env.AWS_ACCESS_KEY_ID, endpoint: process.env.AWS_ENDPOINT_URL_S3, jev: process.env.JEV_API_KEY, featureURL: process.env.FEATURE_BASE_URL, args })
 if (kind === 'migrate') {
-  const database = fileURLToPath(new URL(process.env.TURSO_CONNECTION_URL))
-  mkdirSync(dirname(database), { recursive: true })
-  writeFileSync(database, '')
-  process.exit(0)
+  if (process.env.MANAGED_ENV_BLOCK_MIGRATION) {
+    log({ kind: 'migration-started', pid: process.pid })
+    process.on('SIGTERM', () => { log({ kind: 'migration-stopped' }); process.exit(0) })
+    setInterval(() => {}, 1000)
+  } else {
+    const database = fileURLToPath(new URL(process.env.TURSO_CONNECTION_URL))
+    mkdirSync(dirname(database), { recursive: true })
+    writeFileSync(database, '')
+    process.exit(0)
+  }
 }
 if (kind === 'bootstrap') process.exit(0)
-const appPort = args[args.indexOf('--port') + 1]
-const port = Number(kind === 'server' ? process.env.PORT : appPort)
-const server = createServer((_request, response) => { response.statusCode = 200; response.end(kind) })
-const stop = () => server.close(() => { log({ kind: 'stopped', process: process.pid }); process.exit(0) })
-process.on('SIGTERM', stop)
-process.on('SIGINT', stop)
-setTimeout(() => server.listen(port, '127.0.0.1'), 40)
+if (kind === 'server' || kind === 'app') {
+  const appPort = args[args.indexOf('--port') + 1]
+  const port = Number(kind === 'server' ? process.env.PORT : appPort)
+  const server = createServer((_request, response) => { response.statusCode = 200; response.end(kind) })
+  const stop = () => server.close(() => { log({ kind: 'stopped', process: process.pid }); process.exit(0) })
+  process.on('SIGTERM', stop)
+  process.on('SIGINT', stop)
+  setTimeout(() => server.listen(port, '127.0.0.1'), 40)
+}
 `,
   )
   await chmod(path.join(bin, 'pnpm'), 0o755)
@@ -340,5 +348,85 @@ await withManagedEnvironment({ root: ${JSON.stringify(root)}, app: 'blog', datab
   } finally {
     if (child.exitCode === null && child.signalCode === null && child.pid)
       process.kill(-child.pid, 'SIGKILL')
+  }
+})
+
+test('stops an active migration and does not continue setup after SIGTERM', {
+  tags: ['integration'],
+}, async () => {
+  const { log } = await setup()
+  const serverPort = await freePort()
+  const appPort = await freePort()
+  const rootPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../..',
+  )
+  const moduleURL = pathToFileURL(
+    path.join(rootPath, 'trust-pipeline/feature/environment.ts'),
+  ).href
+  const harness = path.join(root, 'migration-signal-test.mts')
+  await writeFile(
+    harness,
+    `import { appendFileSync } from 'node:fs'
+import { withManagedEnvironment } from ${JSON.stringify(moduleURL)}
+await withManagedEnvironment({ root: ${JSON.stringify(root)}, app: 'blog', databasePath: ${JSON.stringify(path.join(root, 'migration-signal.db'))}, ports: { server: ${serverPort}, app: ${appPort} } }, async () => {
+  appendFileSync(process.env.MANAGED_ENV_TEST_LOG!, JSON.stringify({ kind: 'callback-ran' }) + '\\n')
+}).catch(() => undefined)
+`,
+  )
+  const tsx = path.join(rootPath, 'trust-pipeline/node_modules/.bin/tsx')
+  const child = spawn(tsx, [harness], {
+    cwd: rootPath,
+    detached: true,
+    env: {
+      ...process.env,
+      MANAGED_ENV_TEST_LOG: log,
+      MANAGED_ENV_BLOCK_MIGRATION: '1',
+      PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
+    },
+    stdio: 'inherit',
+  })
+  const exited = new Promise<void>((resolve) =>
+    child.once('exit', () => resolve()),
+  )
+  let migrationPid: number | undefined
+  let timeout: NodeJS.Timeout | undefined
+
+  try {
+    await waitForEvent(log, 'migration-started')
+    migrationPid = (await events(log)).find(
+      (event) => event.kind === 'migration-started',
+    )?.pid as number
+    if (!child.pid) throw new Error('Signal test process did not start')
+    process.kill(child.pid, 'SIGTERM')
+    await Promise.race([
+      exited,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Orchestrator did not stop after SIGTERM')),
+          5000,
+        )
+        timeout.unref()
+      }),
+    ])
+
+    const kinds = (await events(log)).map((event) => event.kind)
+    expect(kinds).toContain('migration-stopped')
+    expect(kinds).not.toContain('bootstrap')
+    expect(kinds).not.toContain('server')
+    expect(kinds).not.toContain('app')
+    expect(kinds).not.toContain('callback-ran')
+  } finally {
+    if (timeout) clearTimeout(timeout)
+    if (migrationPid) {
+      try {
+        process.kill(migrationPid, 'SIGKILL')
+      } catch {
+        // The migration may exit after its pid is read from the log.
+      }
+    }
+    if (child.exitCode === null && child.signalCode === null && child.pid)
+      process.kill(-child.pid, 'SIGKILL')
+    await exited
   }
 })
