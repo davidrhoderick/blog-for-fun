@@ -55,7 +55,10 @@ it accepts only the `product/<id>` branch registered at the exact
 untracked changes. Resume cannot be combined with `--base-ref`; it does not
 fetch, rebase, reset, or rerun baseline verification against a branch that may
 contain product edits. It reruns `pnpm install --frozen-lockfile` to match the
-worktree's current lockfile.
+worktree's current lockfile. It also requires a local success marker written
+only after the initial baseline verification passes; the marker must match the
+feature ID, app, and verified base SHA. Missing, malformed, or mismatched
+markers refuse resume.
 
 The launcher never rebases or modifies the invoking worktree. It never
 force-removes a worktree, deletes product data, or kills a process it did not
@@ -79,7 +82,9 @@ worktree and local database for resuming work.
 - Create `apps/server/.env` in the new worktree only when absent. Use a local
   file-backed database and local-only credentials; never copy or overwrite the
   user's existing environment. Refuse any setup that would target a non-local
-  database. Add `.worktrees/` to the root ignore rules.
+  database or storage endpoint. Strip inherited Turso/AWS credentials from
+  managed child processes; allow existing storage configuration only when its
+  endpoint is loopback-local. Add `.worktrees/` to the root ignore rules.
 - Run `pnpm install --frozen-lockfile` and database migrations. On a fresh local
   database, bootstrap one local administrator; detect an existing account and
   skip bootstrap when resuming. Use the repository's existing package scripts;
@@ -88,6 +93,8 @@ worktree and local database for resuming work.
   `apps/server/.local/product-<id>.db`; this directory is already ignored.
   Managed E2E uses and removes a separate temporary directory under the OS temp
   directory.
+- Write the resume marker at `apps/server/.local/product-<id>.json` only after
+  baseline verification succeeds. It is local state and is never committed.
 - Use the existing local-only bootstrap defaults (`dev@example.com`,
   `Dev Admin`, `dev-only`) for the local file database. Keep these credentials
   out of remote environments and source-controlled files.
@@ -146,9 +153,10 @@ silently inferred by the launcher.
    rewriting user state.
 4. A fresh invocation that collides with an existing branch/path fails without
    changing it. `--resume` accepts only the matching managed branch/path,
-   preserves all changes, reuses its database, and does not change existing
-   administrator credentials. Ctrl-C stops only launcher-owned processes and
-   leaves the worktree/database available.
+   requires a matching success marker, preserves all changes, reuses its
+   database, and does not change existing administrator credentials. Ctrl-C
+   stops only launcher-owned processes and leaves the worktree/database
+   available.
 5. `feature:precheck` and `feature:e2e` run without `FEATURE_BASE_URL` by using
    the manifest app and a disposable migrated database; an explicit loopback
    URL continues to work.

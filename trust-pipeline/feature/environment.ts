@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { createServer } from 'node:net'
+import { createServer, isIP } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -46,6 +46,43 @@ async function validateLocalEnvironment(root: string): Promise<void> {
     )
       throw new Error('Managed environments require a local file database')
   }
+  const storageEndpoint = parse(contents).AWS_ENDPOINT_URL_S3
+  if (storageEndpoint && !isLocalStorageEndpoint(storageEndpoint))
+    throw new Error('Managed environments require a local storage endpoint')
+}
+
+function isLocalStorageEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.replace(/^\[|\]$/g, '')
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      (hostname === 'localhost' ||
+        hostname === '::1' ||
+        (isIP(hostname) === 4 && hostname.startsWith('127.')))
+    )
+  } catch {
+    return false
+  }
+}
+
+function localProcessEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  for (const name of Object.keys(env)) {
+    if (
+      /^(AWS|TURSO)_/.test(name) ||
+      [
+        'BUCKET_NAME',
+        'S3_FORCE_PATH_STYLE',
+        'MEDIA_PUBLIC_URL',
+        'FEATURE_BASE_URL',
+        'JEV_API_KEY',
+      ].includes(name)
+    ) {
+      delete env[name]
+    }
+  }
+  return env
 }
 
 function assertTemporaryDatabase(databasePath: string): void {
@@ -192,6 +229,7 @@ export async function withManagedEnvironment<T>(
       prepared.baseEnv,
     )
     await startServices(prepared, children)
+    console.info(`Local ${prepared.app} ready at ${prepared.baseURL}`)
     return await run({
       baseURL: prepared.baseURL,
       env: { ...prepared.appEnv, FEATURE_BASE_URL: prepared.baseURL },
@@ -226,8 +264,9 @@ async function prepareEnvironment(
   await assertPortAvailable(ports.app)
 
   await mkdir(path.dirname(databasePath), { recursive: true })
+  const baseURL = `http://127.0.0.1:${ports.app}`
   const baseEnv: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...localProcessEnvironment(),
     TURSO_CONNECTION_URL: localDatabaseURL(databasePath),
     TURSO_AUTH_TOKEN: localToken,
     BOOTSTRAP_EMAIL: 'dev@example.com',
@@ -236,10 +275,10 @@ async function prepareEnvironment(
     BOOTSTRAP_IF_INITIALIZED: 'true',
     HOST: '127.0.0.1',
     PORT: String(ports.server),
+    FEATURE_BASE_URL: baseURL,
   }
   const appEnv = { ...baseEnv }
   delete appEnv.PORT
-  const baseURL = `http://127.0.0.1:${ports.app}`
   return { ...options, root, databasePath, ports, baseEnv, appEnv, baseURL }
 }
 

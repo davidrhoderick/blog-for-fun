@@ -19,6 +19,7 @@ let root = ''
 
 afterEach(async () => {
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
   if (root) await rm(root, { recursive: true, force: true })
   root = ''
 })
@@ -53,7 +54,7 @@ const kind = args.includes('db:migrate') ? 'migrate'
   : args.includes('auth:bootstrap') ? 'bootstrap'
   : args.includes('server') ? 'server' : 'app'
 const log = (event) => appendFileSync(process.env.MANAGED_ENV_TEST_LOG, JSON.stringify(event) + '\\n')
-log({ kind, url: process.env.TURSO_CONNECTION_URL, token: process.env.TURSO_AUTH_TOKEN, bootstrap: process.env.BOOTSTRAP_IF_INITIALIZED, port: process.env.PORT, args })
+log({ kind, url: process.env.TURSO_CONNECTION_URL, token: process.env.TURSO_AUTH_TOKEN, bootstrap: process.env.BOOTSTRAP_IF_INITIALIZED, port: process.env.PORT, awsKey: process.env.AWS_ACCESS_KEY_ID, endpoint: process.env.AWS_ENDPOINT_URL_S3, jev: process.env.JEV_API_KEY, featureURL: process.env.FEATURE_BASE_URL, args })
 if (kind === 'migrate') {
   const database = fileURLToPath(new URL(process.env.TURSO_CONNECTION_URL))
   mkdirSync(dirname(database), { recursive: true })
@@ -98,11 +99,25 @@ test('starts the selected local app and stops only its own processes', {
   tags: ['integration'],
 }, async () => {
   const { log } = await setup()
+  vi.stubEnv('TURSO_CONNECTION_URL', 'libsql://production.example')
+  vi.stubEnv('TURSO_AUTH_TOKEN', 'production-db-secret')
+  vi.stubEnv('AWS_ACCESS_KEY_ID', 'cloud-key')
+  vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'cloud-secret')
+  vi.stubEnv('AWS_ENDPOINT_URL_S3', 'https://storage.example')
+  vi.stubEnv('JEV_API_KEY', 'review-secret')
+  vi.stubEnv('FEATURE_BASE_URL', 'https://production.example')
+  const readiness = vi.spyOn(console, 'info').mockImplementation(() => {})
+  const expectedReadiness: string[] = []
+  const expectedFeatureURLs: string[] = []
 
   for (const app of ['admin', 'blog'] as const) {
     const databasePath = path.join(root, `${app}.db`)
     const serverPort = await freePort()
     const appPort = await freePort()
+    expectedReadiness.push(`Local ${app} ready at http://127.0.0.1:${appPort}`)
+    expectedFeatureURLs.push(
+      ...Array.from({ length: 4 }, () => `http://127.0.0.1:${appPort}`),
+    )
     const result = await withManagedEnvironment(
       {
         root,
@@ -139,6 +154,15 @@ test('starts the selected local app and stops only its own processes', {
     'app',
   ])
   expect(
+    starts.every((event) =>
+      [
+        `file:${path.join(root, 'admin.db')}`,
+        `file:${path.join(root, 'blog.db')}`,
+      ].includes(event.url as string),
+    ),
+  ).toBe(true)
+  expect(starts.every((event) => event.token === 'local-token')).toBe(true)
+  expect(
     starts
       .filter((event) => event.kind === 'app')
       .map((event) => (event.args as string[])[1]),
@@ -148,7 +172,14 @@ test('starts the selected local app and stops only its own processes', {
       .filter((event) => event.kind === 'bootstrap')
       .every((event) => event.bootstrap === 'true'),
   ).toBe(true)
+  expect(starts.every((event) => event.awsKey === undefined)).toBe(true)
+  expect(starts.every((event) => event.endpoint === undefined)).toBe(true)
+  expect(starts.every((event) => event.jev === undefined)).toBe(true)
+  expect(starts.map((event) => event.featureURL)).toEqual(expectedFeatureURLs)
   expect(recorded.filter((event) => event.kind === 'stopped')).toHaveLength(4)
+  expect(readiness.mock.calls.map(([message]) => message)).toEqual(
+    expectedReadiness,
+  )
 })
 
 test('refuses an occupied port without disturbing its owner', {
@@ -205,6 +236,29 @@ test('refuses a non-local server .env before running migrations', {
       async () => undefined,
     ),
   ).rejects.toThrow(/local file database/i)
+  await expect(readFile(log, 'utf8')).rejects.toThrow()
+})
+
+test('refuses a non-local storage endpoint before running migrations', {
+  tags: ['integration'],
+}, async () => {
+  const { log } = await setup()
+  await mkdir(path.join(root, 'apps/server'), { recursive: true })
+  await writeFile(
+    path.join(root, 'apps/server/.env'),
+    'TURSO_CONNECTION_URL=file:local.db\nAWS_ENDPOINT_URL_S3=https://storage.example\n',
+  )
+
+  await expect(
+    withManagedEnvironment(
+      {
+        root,
+        app: 'blog',
+        databasePath: path.join(root, 'remote-storage-refused.db'),
+      },
+      async () => undefined,
+    ),
+  ).rejects.toThrow(/local storage endpoint/i)
   await expect(readFile(log, 'utf8')).rejects.toThrow()
 })
 

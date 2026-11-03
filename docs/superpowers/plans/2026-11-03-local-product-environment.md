@@ -25,7 +25,8 @@
 
 - Missing base or existing branch/worktree path → refuse safely without changing the invoking worktree (Task 3 integration test).
 - Resume with a mismatched branch/path or with `--base-ref` → refuse; a matching resume preserves dirty tracked/untracked changes and skips baseline verification (Task 3 integration test).
-- Existing non-local `.env` or database target → refuse rather than connect to it (Task 2 test).
+- Resume without a success marker from a passing baseline, or with an ID/app/base mismatch → refuse so resume cannot bypass the initial verification gate (Task 3 integration test).
+- Existing non-local database or storage endpoint in `.env` → refuse rather than connect to it; inherited Turso/AWS credentials are stripped from managed children (Task 2 integration tests).
 - Resuming a local database with an existing administrator → do not bootstrap again or alter its credentials (Task 2 test).
 - Occupied app port or shutdown signal → report the collision and stop only owned child processes (Task 2 test).
 - Missing/invalid manifest app, no selected E2E tests, and explicit external URL → validate each path; preserve current loopback validation (Tasks 1 and 4 tests).
@@ -73,14 +74,14 @@ Expected: PASS, including existing traversal and accepted-SHA cases.
 - Extend `bootstrapAdministrator(input, { ifInitialized: true })` to return `null` without changing an existing account; preserve the current throwing behavior when the option is omitted. `bootstrap-auth.ts` enables that option only when `BOOTSTRAP_IF_INITIALIZED=true`.
 - Provide a small `environment.ts run --app ... --database ... -- <command>` CLI mode so the JavaScript worktree launcher can run `pnpm product` inside the same lifecycle.
 
-- [x] **Step 1: Add failing tests**: in the server integration test, bootstrap once then assert `ifInitialized` returns `null` and preserves the account; in the environment test, use a temporary root and stub `pnpm` to verify local DB env reaches migration/bootstrap, the right UI is selected (`admin` → 3001, `blog` → 3000), health readiness is awaited, and `finally` terminates only spawned children.
+- [x] **Step 1: Add failing tests**: in the server integration test, bootstrap once then assert `ifInitialized` returns `null` and preserves the account; in the environment test, use a temporary root and stub `pnpm` to verify local DB env reaches migration/bootstrap even when the parent has remote credentials, inherited cloud credentials are not forwarded, non-local database/storage endpoints are refused, the right UI is selected (`admin` → 3001, `blog` → 3000), health readiness is awaited, and `finally` terminates only spawned children.
 - [x] **Step 2: Run the focused tests and confirm the new behavior is missing.**
 
 Run: `pnpm --filter server exec vitest run src/auth/auth.integration.test.ts` and `pnpm --filter trust-pipeline exec vitest run feature/environment.test.ts`
 
 Expected: FAIL because the idempotent bootstrap option and `environment.ts` do not exist.
 
-- [x] **Step 3: Implement the helper** with Node child processes, loopback health checks, local file DB values, an idempotent first-admin bootstrap check, and signal-safe cleanup. Refuse an existing non-local server environment; do not overwrite `.env` or kill an occupied port's owner.
+- [x] **Step 3: Implement the helper** with Node child processes, loopback health checks, local file DB values, an idempotent first-admin bootstrap check, and signal-safe cleanup. Strip inherited Turso/AWS credentials, refuse non-local database/storage endpoints in `.env`, and do not overwrite `.env` or kill an occupied port's owner.
 - [x] **Step 4: Extend tests for resuming an initialized DB and port collision.** Assert an existing administrator is not bootstrapped again and a port collision leaves the unrelated process running.
 - [x] **Step 5: Run both focused test files.**
 
@@ -94,23 +95,23 @@ Expected: PASS; an existing account remains unchanged, and children started by t
 - Create: `scripts/product-feature.mjs`
 - Modify: `package.json`
 - Modify: `.gitignore`
-- Test: `trust-pipeline/feature/product-launcher.test.ts`
+- Create: `trust-pipeline/feature/product-launcher.test.ts`
 
 **Interface:**
 - `pnpm product:feature --id <ID> --app <admin|blog> [--base-ref <ref>] [--resume]`.
 - Default base: fetched `origin/main`; explicit `--base-ref` is required to stack. Create branch `product/<ID>` in `.worktrees/<ID>` and print the chosen base SHA.
-- `--resume` cannot be combined with `--base-ref`; accept only branch `product/<ID>` registered at `.worktrees/<ID>`. Preserve dirty files, reuse `apps/server/.local/product-<ID>.db`, rerun frozen dependency installation, and skip baseline verification.
+- `--resume` cannot be combined with `--base-ref`; accept only branch `product/<ID>` registered at `.worktrees/<ID>` with a matching `apps/server/.local/product-<ID>.json` success marker. Preserve dirty files, reuse `apps/server/.local/product-<ID>.db`, rerun frozen dependency installation, and skip baseline verification.
 
-- [ ] **Step 1: Add failing launcher integration tests** with a temporary Git repository and stub `pnpm`: assert default/base-ref branch creation, install-before-verify ordering, no product launch after failed verify, collision refusal without `--resume`, exact branch/path validation with `--resume`, preservation of dirty files, and skipped baseline verification on resume.
-- [ ] **Step 2: Run the focused test and confirm it fails.**
+- [x] **Step 1: Add failing launcher integration tests** with a temporary Git repository and stub `pnpm`: assert default/base-ref branch creation, install-before-verify ordering, no product launch after failed verify, invalid ID/app and non-local `.env` refusal, collision refusal without `--resume`, exact branch/path and success-marker validation with `--resume`, preservation of dirty files, and skipped baseline verification on resume.
+- [x] **Step 2: Run the focused test and confirm it fails.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/product-launcher.test.ts`
 
 Expected: FAIL because the launcher and root script do not exist.
 
-- [ ] **Step 3: Implement the standard-library launcher**: for a new feature, fetch and resolve the base; refuse existing branch/path; add ignored `.worktrees/`; create the worktree; install frozen dependencies; check `git status`; run `VERIFY_BASE_REF=<base-sha> pnpm verify`; check `git status` again and stop/report if verification fails or tracked/untracked changes appeared. For `--resume`, accept only the exact managed branch/path, preserve existing changes, rerun frozen dependency installation, and skip verification. Both paths validate/create a local `.env` without overwriting and refuse a non-file DB URL, then invoke `pnpm --filter trust-pipeline exec tsx feature/environment.ts run --app <app> --database <persistent-path> -- pnpm product` inside the worktree.
-- [ ] **Step 4: Scope environment secrets to verification only.** Forward `JEV_API_KEY` from the invoking process or its `trust-pipeline/.env` to the verify child; never copy the full secret file or pass the key to the app/product-agent processes.
-- [ ] **Step 5: Run launcher tests.**
+- [x] **Step 3: Implement the standard-library launcher**: for a new feature, fetch and resolve the base; refuse existing branch/path; add ignored `.worktrees/`; create the worktree; install frozen dependencies; check `git status`; run `VERIFY_BASE_REF=<base-sha> pnpm verify`; check `git status` again and stop/report if verification fails or tracked/untracked changes appeared; only after success write `apps/server/.local/product-<ID>.json` with the feature ID, app, and base SHA. For `--resume`, require that matching marker and exact managed branch/path, preserve existing changes, rerun frozen dependency installation, and skip verification. Both paths validate/create a local `.env` without overwriting and refuse a non-file DB URL, then invoke `pnpm --filter trust-pipeline exec tsx feature/environment.ts run --app <app> --database <persistent-path> -- pnpm product` inside the worktree.
+- [x] **Step 4: Scope environment secrets to verification only.** Forward `JEV_API_KEY` from the invoking process or its `trust-pipeline/.env` to the verify child; never copy the full secret file or pass the key to the app/product-agent processes.
+- [x] **Step 5: Run launcher tests.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/product-launcher.test.ts`
 
