@@ -176,6 +176,125 @@ test('creates from fetched main without running baseline verification', {
   ).toContain('TURSO_CONNECTION_URL=file:local.db')
 })
 
+test('resumes a matching managed worktree by default', {
+  tags: ['integration'],
+}, async () => {
+  const { repo, bin, log } = await createRepo()
+  expect(
+    runLauncher(repo, bin, log, ['--id', 'INS-131', '--app', 'blog']).status,
+  ).toBe(0)
+  const worktree = path.join(repo, '.worktrees/INS-131')
+  await writeFile(path.join(worktree, 'base.txt'), 'product edit\n')
+  await writeFile(path.join(worktree, 'untracked.txt'), 'keep me\n')
+  const before = (await readEvents(log)).length
+
+  const resumed = runLauncher(repo, bin, log, [
+    '--id',
+    'INS-131',
+    '--app',
+    'blog',
+    '--base-ref',
+    'HEAD',
+  ])
+
+  expect(resumed.status).toBe(0)
+  expect(resumed.stdout).toContain('Resuming product/INS-131')
+  expect(await readFile(path.join(worktree, 'base.txt'), 'utf8')).toBe(
+    'product edit\n',
+  )
+  expect(await readFile(path.join(worktree, 'untracked.txt'), 'utf8')).toBe(
+    'keep me\n',
+  )
+  expect(
+    (await readEvents(log)).slice(before).map((event) => event.kind),
+  ).toEqual(['install', 'environment'])
+})
+
+test('refuses to resume when an explicit base ref has changed', {
+  tags: ['integration'],
+}, async () => {
+  const { repo, bin, log } = await createRepo()
+  expect(
+    runLauncher(repo, bin, log, ['--id', 'INS-133', '--app', 'blog']).status,
+  ).toBe(0)
+  await writeFile(path.join(repo, 'new-base.txt'), 'new base\n')
+  git(repo, ['add', 'new-base.txt'])
+  git(repo, ['commit', '-m', 'new base'])
+  const before = (await readEvents(log)).length
+
+  const result = runLauncher(repo, bin, log, [
+    '--id',
+    'INS-133',
+    '--app',
+    'blog',
+    '--base-ref',
+    'HEAD',
+  ])
+
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('does not match this worktree')
+  expect((await readEvents(log)).length).toBe(before)
+})
+
+test('resets an exact managed worktree only when requested', {
+  tags: ['integration'],
+}, async () => {
+  const { repo, bin, log, baseSha } = await createRepo()
+  expect(
+    runLauncher(repo, bin, log, ['--id', 'INS-132', '--app', 'blog']).status,
+  ).toBe(0)
+  const worktree = path.join(repo, '.worktrees/INS-132')
+  await writeFile(path.join(worktree, 'base.txt'), 'discard this edit\n')
+  await writeFile(path.join(worktree, 'untracked.txt'), 'discard this file\n')
+  const database = path.join(worktree, 'apps/server/.local/product-INS-132.db')
+  await writeFile(database, 'discard this database\n')
+
+  const reset = runLauncher(repo, bin, log, [
+    '--id',
+    'INS-132',
+    '--app',
+    'blog',
+    '--base-ref',
+    'HEAD',
+    '--reset',
+  ])
+
+  expect(reset.status).toBe(0)
+  expect(git(repo, ['rev-parse', 'product/INS-132'])).toBe(baseSha)
+  expect(await readFile(path.join(worktree, 'base.txt'), 'utf8')).toBe('main\n')
+  await expect(readFile(path.join(worktree, 'untracked.txt'))).rejects.toThrow()
+  await expect(readFile(database)).rejects.toThrow()
+  expect(
+    await readFile(path.join(worktree, 'apps/server/.env'), 'utf8'),
+  ).toContain('TURSO_CONNECTION_URL=file:local.db')
+})
+
+test('refuses to reset an unmarked worktree', {
+  tags: ['integration'],
+}, async () => {
+  const { repo, bin, log, baseSha } = await createRepo()
+  const worktree = path.join(repo, '.worktrees/INS-134')
+  git(repo, ['worktree', 'add', '-b', 'product/INS-134', worktree, baseSha])
+  const file = path.join(worktree, 'keep.txt')
+  await writeFile(file, 'preserve unmarked worktree\n')
+
+  const result = runLauncher(repo, bin, log, [
+    '--id',
+    'INS-134',
+    '--app',
+    'blog',
+    '--base-ref',
+    'HEAD',
+    '--reset',
+  ])
+
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('valid setup marker')
+  expect(await readFile(file, 'utf8')).toBe('preserve unmarked worktree\n')
+  expect(git(repo, ['rev-parse', 'product/INS-134'])).toBe(baseSha)
+  await expect(readFile(log, 'utf8')).rejects.toThrow()
+})
+
 test('uses the explicit stacking base without rebasing the source branch', {
   tags: ['integration'],
 }, async () => {
@@ -218,7 +337,7 @@ test('does not invoke verification during setup even when it would fail', {
   ])
 })
 
-test('resumes only the exact worktree and preserves local changes', {
+test('explicitly resumes the exact worktree and preserves local changes', {
   tags: ['integration'],
 }, async () => {
   const { repo, bin, log } = await createRepo()
@@ -261,13 +380,6 @@ test('resumes only the exact worktree and preserves local changes', {
   expect(
     (await readEvents(log)).slice(before).map((event) => event.kind),
   ).toEqual(['install', 'environment'])
-  const statusBeforeCollision = git(repo, ['status', '--porcelain'])
-  const eventCountBeforeCollision = (await readEvents(log)).length
-  expect(
-    runLauncher(repo, bin, log, ['--id', 'INS-126', '--app', 'blog']).status,
-  ).not.toBe(0)
-  expect(git(repo, ['status', '--porcelain'])).toBe(statusBeforeCollision)
-  expect((await readEvents(log)).length).toBe(eventCountBeforeCollision)
 })
 
 test('rejects a branch registered at the wrong worktree path', {
@@ -289,9 +401,16 @@ test('rejects a branch registered at the wrong worktree path', {
   expect(git(repo, ['-C', 'other-path', 'branch', '--show-current'])).toBe(
     'product/INS-127',
   )
+  expect(
+    runLauncher(repo, bin, log, ['--id', 'INS-127', '--app', 'blog', '--reset'])
+      .status,
+  ).not.toBe(0)
+  expect(git(repo, ['-C', 'other-path', 'branch', '--show-current'])).toBe(
+    'product/INS-127',
+  )
 })
 
-test('rejects invalid IDs, apps, and incompatible resume options before setup', {
+test('rejects invalid IDs, apps, and incompatible reset modes before setup', {
   tags: ['integration'],
 }, async () => {
   const { repo, bin, log } = await createRepo()
@@ -299,7 +418,7 @@ test('rejects invalid IDs, apps, and incompatible resume options before setup', 
   for (const args of [
     ['--id', '../INS-128', '--app', 'blog'],
     ['--id', 'INS-128', '--app', 'storefront'],
-    ['--id', 'INS-128', '--app', 'blog', '--resume', '--base-ref', 'main'],
+    ['--id', 'INS-128', '--app', 'blog', '--resume', '--reset'],
   ]) {
     expect(runLauncher(repo, bin, log, args).status).not.toBe(0)
   }

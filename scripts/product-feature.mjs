@@ -16,6 +16,10 @@ function parseOptions(args) {
       options.resume = true
       continue
     }
+    if (flag === '--reset') {
+      options.reset = true
+      continue
+    }
     if (!['--id', '--app', '--base-ref'].includes(flag))
       throw new Error(`Unknown option: ${flag}`)
     const value = args[++index]
@@ -30,8 +34,8 @@ function parseOptions(args) {
     throw new Error(`Invalid feature ID: ${options.id}`)
   if (!['admin', 'blog'].includes(options.app))
     throw new Error('--app must be admin or blog')
-  if (options.resume && options.baseRef)
-    throw new Error('--resume cannot be combined with --base-ref')
+  if (options.resume && options.reset)
+    throw new Error('--resume cannot be combined with --reset')
   return options
 }
 
@@ -170,6 +174,42 @@ function assertClean(root) {
   if (status) throw new Error(`Baseline worktree is not clean:\n${status}`)
 }
 
+function assertManagedWorktree(root, target, branch) {
+  const entry = worktrees(root).find(
+    (worktree) => path.resolve(worktree.path) === target,
+  )
+  if (!entry || entry.branch !== `refs/heads/${branch}`)
+    throw new Error(`Expected managed worktree ${branch} at ${target}`)
+}
+
+function readSetupMarker(target, id, app, operation) {
+  const markerPath = path.join(
+    target,
+    'apps/server/.local',
+    `product-${id}.json`,
+  )
+  let marker
+  try {
+    marker = JSON.parse(readFileSync(markerPath, 'utf8'))
+  } catch (error) {
+    throw new Error(
+      `Cannot ${operation} without a valid setup marker: ${markerPath}`,
+      { cause: error },
+    )
+  }
+  if (
+    marker.schemaVersion !== 1 ||
+    marker.id !== id ||
+    marker.app !== app ||
+    !/^[a-f\d]{40}$/i.test(marker.baseSha)
+  ) {
+    throw new Error(
+      `Cannot ${operation}: setup marker does not match ${id} and ${app}`,
+    )
+  }
+  return marker
+}
+
 function localProcessEnvironment(source = process.env) {
   const env = { ...source }
   for (const name of Object.keys(env)) {
@@ -189,38 +229,20 @@ function localProcessEnvironment(source = process.env) {
   return env
 }
 
-function resumeWorktree(root, target, branch, id, app) {
-  const entry = worktrees(root).find(
-    (worktree) => path.resolve(worktree.path) === target,
-  )
-  if (!entry || entry.branch !== `refs/heads/${branch}`)
-    throw new Error(`Cannot resume: expected ${branch} at ${target}`)
-
-  const markerPath = path.join(
-    target,
-    'apps/server/.local',
-    `product-${id}.json`,
-  )
-  let marker
-  try {
-    marker = JSON.parse(readFileSync(markerPath, 'utf8'))
-  } catch (error) {
-    throw new Error(
-      `Cannot resume without a valid setup marker: ${markerPath}`,
-      {
-        cause: error,
-      },
-    )
-  }
-  if (
-    marker.schemaVersion !== 1 ||
-    marker.id !== id ||
-    marker.app !== app ||
-    !/^[a-f\d]{40}$/i.test(marker.baseSha)
-  ) {
-    throw new Error(
-      `Cannot resume: setup marker does not match ${id} and ${app}`,
-    )
+function resumeWorktree(root, target, branch, id, app, baseRef) {
+  assertManagedWorktree(root, target, branch)
+  const marker = readSetupMarker(target, id, app, 'resume')
+  if (baseRef) {
+    const requestedBase = git(root, [
+      'rev-parse',
+      '--verify',
+      '--end-of-options',
+      `${baseRef}^{commit}`,
+    ])
+    if (requestedBase !== marker.baseSha)
+      throw new Error(
+        `Cannot resume: --base-ref ${baseRef} does not match this worktree's setup base; use --reset to recreate it`,
+      )
   }
   const baseIsAncestor = spawnSync(
     'git',
@@ -234,6 +256,16 @@ function resumeWorktree(root, target, branch, id, app) {
   console.info(`Resuming ${branch}; base ${marker.baseSha}`)
 }
 
+function resetWorktree(root, target, branch, id, app) {
+  assertManagedWorktree(root, target, branch)
+  readSetupMarker(target, id, app, 'reset')
+  if (!refExists(root, `refs/heads/${branch}`))
+    throw new Error(`Cannot reset: local branch ${branch} does not exist`)
+  console.info(`Resetting ${branch}; deleting its worktree and local data`)
+  git(root, ['worktree', 'remove', '--force', target])
+  git(root, ['branch', '-D', branch])
+}
+
 async function writeResumeMarker(target, id, app, baseSha) {
   const directory = path.join(target, 'apps/server/.local')
   await mkdir(directory, { recursive: true })
@@ -244,34 +276,71 @@ async function writeResumeMarker(target, id, app, baseSha) {
   )
 }
 
+async function createWorktree(root, target, branch, id, app, baseSha, safeEnv) {
+  console.info(`Base ${baseSha}`)
+  git(root, ['worktree', 'add', '-b', branch, target, baseSha])
+  await validateLocalEnv(target)
+  run('pnpm', ['install', '--frozen-lockfile'], target, safeEnv)
+  assertClean(target)
+  await writeResumeMarker(target, id, app, baseSha)
+}
+
+async function createNewWorktree(root, target, branch, options, safeEnv) {
+  if (pathExists(target) || refExists(root, `refs/heads/${branch}`))
+    throw new Error(`Branch or worktree already exists for ${options.id}`)
+  if (remoteBranchExists(root, branch))
+    throw new Error(`Origin already has branch ${branch}`)
+  await createWorktree(
+    root,
+    target,
+    branch,
+    options.id,
+    options.app,
+    selectedBase(root, options.baseRef),
+    safeEnv,
+  )
+}
+
 async function main() {
   const options = parseOptions(process.argv.slice(2))
   const root = process.cwd()
   const branch = `product/${options.id}`
   const target = path.resolve(root, '.worktrees', options.id)
   const safeEnv = localProcessEnvironment()
+  const existing = pathExists(target) || refExists(root, `refs/heads/${branch}`)
+  let resuming = false
 
-  if (options.resume) {
-    resumeWorktree(root, target, branch, options.id, options.app)
-    await validateLocalEnv(target)
-  } else {
-    if (pathExists(target) || refExists(root, `refs/heads/${branch}`))
-      throw new Error(`Branch or worktree already exists for ${options.id}`)
+  if (options.reset) {
+    assertManagedWorktree(root, target, branch)
     if (remoteBranchExists(root, branch))
-      throw new Error(`Origin already has branch ${branch}`)
-
+      throw new Error(`Cannot reset: origin already has branch ${branch}`)
     const baseSha = selectedBase(root, options.baseRef)
-    console.info(`Base ${baseSha}`)
-    git(root, ['worktree', 'add', '-b', branch, target, baseSha])
+    resetWorktree(root, target, branch, options.id, options.app)
+    await createWorktree(
+      root,
+      target,
+      branch,
+      options.id,
+      options.app,
+      baseSha,
+      safeEnv,
+    )
+  } else if (options.resume || existing) {
+    resumeWorktree(
+      root,
+      target,
+      branch,
+      options.id,
+      options.app,
+      options.baseRef,
+    )
     await validateLocalEnv(target)
-
-    run('pnpm', ['install', '--frozen-lockfile'], target, safeEnv)
-    assertClean(target)
-    await writeResumeMarker(target, options.id, options.app, baseSha)
+    resuming = true
+  } else {
+    await createNewWorktree(root, target, branch, options, safeEnv)
   }
 
-  if (options.resume)
-    run('pnpm', ['install', '--frozen-lockfile'], target, safeEnv)
+  if (resuming) run('pnpm', ['install', '--frozen-lockfile'], target, safeEnv)
   await ensureLocalEnv(target)
 
   const database = path.join(

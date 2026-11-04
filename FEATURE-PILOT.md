@@ -15,6 +15,17 @@ infrastructure.
 - There are no feature manifests under `docs/features/` or Playwright specs
   under `tests/` yet.
 
+## Current handoff
+
+- The launcher resumes an exact managed worktree by default; `--reset` is
+  destructive and only for an intentional restart.
+- Local admin bootstrap prompts for a password when needed. The parent shell's
+  `BOOTSTRAP_PASSWORD` is not forwarded.
+- `pnpm verify` passes on this branch. Next, rerun
+  `pnpm product:feature --id blog-comments --app blog --base-ref HEAD` from the
+  repository root and enter a valid password if prompted. This resumes the
+  existing worktree and database; do not pass `--reset`.
+
 ## 1. Start an isolated product session
 
 Choose a stable feature ID, for example `BLOG-123`, and target app. From the
@@ -32,10 +43,18 @@ health, and launches `product-dev`. It preserves existing `.env` files, rejects
 remote database or storage endpoints, and never kills unrelated processes.
 Setup failures should be reported to engineering.
 
-After Ctrl-C, resume explicitly without resetting product changes:
+After Ctrl-C, rerun the same command to resume without resetting product
+changes (`--resume` is optional):
 
 ```sh
 pnpm product:feature --id BLOG-123 --app blog --resume
+```
+
+To intentionally start over, pass `--reset`. This deletes the managed
+worktree, local branch, database, `.env`, and all other local worktree data:
+
+```sh
+pnpm product:feature --id BLOG-123 --app blog --base-ref HEAD --reset
 ```
 
 **Check:** the launcher prints the selected loopback URL after the server and

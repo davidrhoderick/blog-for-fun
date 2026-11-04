@@ -18,7 +18,7 @@ The product launcher creates an isolated worktree from fetched `origin/main`, in
 pnpm product:feature --id <FEATURE_ID> --app <admin|blog>
 ```
 
-Use `--base-ref <ref>` only when product explicitly requests stacking. After Ctrl-C, resume with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog> --resume`; do not reset or clean changes. The launcher owns migrations, local admin bootstrap, app startup, and shutdown. It preserves existing `.env` files and refuses non-local database/storage endpoints. Do not configure production/shared credentials or manually start another server/app on the same ports.
+Use `--base-ref <ref>` only when product explicitly requests stacking. After Ctrl-C, rerun the same launcher command; an exact managed worktree resumes automatically. `--resume` is also accepted. Use `--reset` only when intentionally discarding the entire worktree, local database, and `.env` to start fresh. The launcher owns migrations, local admin bootstrap, app startup, and shutdown. It preserves existing `.env` files during normal setup and refuses non-local database/storage endpoints. Do not configure production/shared credentials or manually start another server/app on the same ports.
 
 Make the application available for interactive testing and implement feedback directly. Ask product when intended behavior is unclear. Ask about behavior only, never technical implementation details.
 

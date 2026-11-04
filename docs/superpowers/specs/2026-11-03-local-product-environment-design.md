@@ -49,21 +49,28 @@ or `blog`. An optional `--base-ref` is for explicit stacking; the normal default
 is the latest fetched `origin/main`. While developing this helper before it is
 merged, test it with `--base-ref HEAD` so the new worktree contains the helper.
 
-Without `--resume`, the launcher fails clearly if its target branch/worktree
-already exists or the requested base cannot be resolved. `--resume` is explicit:
-it accepts only the `product/<id>` branch registered at the exact
-`.worktrees/<id>` path, reuses its local database, and preserves all tracked and
-untracked changes. Resume cannot be combined with `--base-ref`; it does not
-fetch, rebase, or reset a branch that may contain product edits. It reruns
+When the exact managed branch/worktree already exists, the launcher resumes it
+by default; `--resume` is also accepted explicitly. It accepts only the
+`product/<id>` branch registered at `.worktrees/<id>`, reuses its local database,
+and preserves all tracked and untracked changes. If `--base-ref` is supplied on
+resume, it must resolve locally to the setup marker's base SHA; resume never
+fetches, rebases, or resets product edits. It reruns
 `pnpm install --frozen-lockfile` to match the worktree's current lockfile. It
 also requires a local setup marker written after dependency installation and a
 clean-worktree check; the marker must match the feature ID, app, and selected
 base SHA. Missing, malformed, or mismatched markers refuse resume.
 
-The launcher never rebases or modifies the invoking worktree. It never
-force-removes a worktree, deletes product data, or kills a process it did not
-start. On exit it stops only its own app processes and keeps the feature
-worktree and local database for resuming work.
+Use `--reset` only to intentionally start over from an existing managed
+worktree. It force-removes that exact worktree and its local branch, including
+ignored files such as the local database and `.env`, then recreates it from the
+selected base. It never removes a remote branch or a worktree registered at a
+different path. Unmanaged or mismatched collisions fail safely.
+
+The launcher never rebases or modifies the invoking worktree, or kills a
+process it did not start. It preserves feature work and local data by default;
+only an explicit `--reset` removes the managed feature worktree and its local
+data. On exit it stops only its own app processes and keeps the feature worktree
+and local database for resuming work.
 
 ## Environment behavior
 
@@ -72,10 +79,13 @@ worktree and local database for resuming work.
   start the server and selected UI, verify readiness, then launch the product
   agent. Do not run the trust pipeline before product handoff; engineering runs
   it after acceptance.
-- On `--resume`, validate the exact managed branch/path, preserve the worktree,
-  rerun frozen dependency installation, then migrate/reuse the persistent local
-  DB and run app health checks. Never clean or reset generated/user changes
-  automatically.
+- On default resume or `--resume`, validate the exact managed branch/path,
+  preserve the worktree, rerun frozen dependency installation, then migrate/
+  reuse the persistent local DB and run app health checks. Never clean or reset
+  generated/user changes automatically.
+- On `--reset`, remove only the matching managed worktree and local branch, then
+  recreate from the requested base; this intentionally deletes its local DB,
+  `.env`, and all other worktree data.
 - Create `apps/server/.env` in the new worktree only when absent. Use a local
   file-backed database and local-only credentials; never copy or overwrite the
   user's existing environment. Refuse any setup that would target a non-local
@@ -93,9 +103,9 @@ worktree and local database for resuming work.
 - Write the setup marker at `apps/server/.local/product-<id>.json` only after
   frozen dependency installation and the clean-worktree check. It is local state
   and is never committed.
-- Use the existing local-only bootstrap defaults (`dev@example.com`,
-  `Dev Admin`, `dev-only`) for the local file database. Keep these credentials
-  out of remote environments and source-controlled files.
+- Use the local-only bootstrap defaults (`dev@example.com`, `Dev Admin`) for the
+  local file database. Do not inherit `BOOTSTRAP_PASSWORD` from the parent
+  shell; prompt for it when the local database needs an administrator.
 - Start the server and only the selected app. Wait for `/health` and the app
   endpoint before launching `product-dev`; pass and display the selected
   loopback URL. If a required port is occupied, stop with a useful message; do
@@ -146,14 +156,15 @@ silently inferred by the launcher.
 2. Migrations run against that local database; bootstrap credentials are
    local-only and bootstrap runs once for each fresh database.
 3. The server and selected app start only after migrations. Health checks pass
-   before the product agent launches. An occupied port, existing branch/path,
-   invalid ID/app, or non-local database fails safely without deleting or
-   rewriting user state.
-4. A fresh invocation that collides with an existing branch/path fails without
-   changing it. `--resume` accepts only the matching managed branch/path,
-   requires a matching setup marker, preserves all changes, reuses its
-   database, and does not change existing administrator credentials. Ctrl-C
-   stops only launcher-owned processes and leaves the worktree/database
+   before the product agent launches. An occupied port, unmanaged/mismatched
+   branch/path, invalid ID/app, or non-local database fails safely without
+   deleting or rewriting user state.
+4. Repeating a command for the exact managed branch/path resumes without
+   changing it; a matching setup marker is required, all changes and the
+   database are preserved, and existing administrator credentials are
+   unchanged. `--reset` only removes that exact managed worktree and local
+   branch. Unmanaged/mismatched paths and remote branches are never removed.
+   Ctrl-C stops only launcher-owned processes and leaves the worktree/database
    available.
 5. `feature:precheck` and `feature:e2e` run without `FEATURE_BASE_URL` by using
    the manifest app and a disposable migrated database; an explicit loopback

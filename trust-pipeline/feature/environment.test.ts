@@ -54,7 +54,7 @@ const kind = args.includes('db:migrate') ? 'migrate'
   : args.includes('auth:bootstrap') ? 'bootstrap'
   : args.includes('server') ? 'server' : 'app'
 const log = (event) => appendFileSync(process.env.MANAGED_ENV_TEST_LOG, JSON.stringify(event) + '\\n')
-log({ kind, url: process.env.TURSO_CONNECTION_URL, token: process.env.TURSO_AUTH_TOKEN, bootstrap: process.env.BOOTSTRAP_IF_INITIALIZED, port: process.env.PORT, awsKey: process.env.AWS_ACCESS_KEY_ID, endpoint: process.env.AWS_ENDPOINT_URL_S3, jev: process.env.JEV_API_KEY, featureURL: process.env.FEATURE_BASE_URL, args })
+log({ kind, url: process.env.TURSO_CONNECTION_URL, token: process.env.TURSO_AUTH_TOKEN, bootstrap: process.env.BOOTSTRAP_IF_INITIALIZED, bootstrapPassword: process.env.BOOTSTRAP_PASSWORD, port: process.env.PORT, awsKey: process.env.AWS_ACCESS_KEY_ID, endpoint: process.env.AWS_ENDPOINT_URL_S3, jev: process.env.JEV_API_KEY, featureURL: process.env.FEATURE_BASE_URL, args })
 if (kind === 'migrate') {
   if (process.env.MANAGED_ENV_BLOCK_MIGRATION) {
     log({ kind: 'migration-started', pid: process.pid })
@@ -107,6 +107,7 @@ test('starts the selected local app and stops only its own processes', {
   tags: ['integration'],
 }, async () => {
   const { log } = await setup()
+  vi.stubEnv('BOOTSTRAP_PASSWORD', 'parent-shell-password')
   vi.stubEnv('TURSO_CONNECTION_URL', 'libsql://production.example')
   vi.stubEnv('TURSO_AUTH_TOKEN', 'production-db-secret')
   vi.stubEnv('AWS_ACCESS_KEY_ID', 'cloud-key')
@@ -180,6 +181,9 @@ test('starts the selected local app and stops only its own processes', {
       .filter((event) => event.kind === 'bootstrap')
       .every((event) => event.bootstrap === 'true'),
   ).toBe(true)
+  expect(starts.every((event) => event.bootstrapPassword === undefined)).toBe(
+    true,
+  )
   expect(starts.every((event) => event.awsKey === undefined)).toBe(true)
   expect(starts.every((event) => event.endpoint === undefined)).toBe(true)
   expect(starts.every((event) => event.jev === undefined)).toBe(true)

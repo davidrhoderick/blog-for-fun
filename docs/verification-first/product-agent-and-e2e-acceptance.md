@@ -82,7 +82,7 @@ Database and bootstrap:
 Environment requirements:
 
 - Start a disposable development environment for each feature with `pnpm product:feature`; it owns the worktree, local database, migrations, and app processes.
-- Resume after Ctrl-C with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog> --resume`. Do not reset or clean the managed worktree.
+- After Ctrl-C, rerun the launcher command to resume the exact managed worktree; `--resume` is optional. Use `--reset` only when intentionally deleting the worktree, local database, `.env`, and its other local data.
 - Do not point product or managed E2E work at any shared or remote Turso database; managed runs use local file databases only.
 - Preserve development state during interactive work.
 - Prevent access to production data and irreversible external operations.
