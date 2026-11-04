@@ -15,6 +15,15 @@ infrastructure.
 - There are no feature manifests under `docs/features/` or Playwright specs
   under `tests/` yet.
 
+## Current handoff
+
+- Fixed managed local bootstrap to stop supplying an invalid hardcoded password
+  and to exclude any inherited `BOOTSTRAP_PASSWORD`.
+- From the repository root, rerun
+  `pnpm product:feature --id blog-comments --app blog --base-ref HEAD`; enter a
+  valid password if prompted. This preserves the existing worktree and database;
+  do not pass `--reset`.
+
 ## 1. Start an isolated product session
 
 Choose a stable feature ID, for example `BLOG-123`, and target app. From the

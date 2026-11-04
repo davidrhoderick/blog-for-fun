@@ -85,6 +85,7 @@ function localProcessEnvironment(): NodeJS.ProcessEnv {
         'MEDIA_PUBLIC_URL',
         'FEATURE_BASE_URL',
         'JEV_API_KEY',
+        'BOOTSTRAP_PASSWORD',
       ].includes(name)
     ) {
       delete env[name]
@@ -310,7 +311,6 @@ async function prepareEnvironment(
     TURSO_AUTH_TOKEN: localToken,
     BOOTSTRAP_EMAIL: 'dev@example.com',
     BOOTSTRAP_DISPLAY_NAME: 'Dev Admin',
-    BOOTSTRAP_PASSWORD: 'dev-only',
     BOOTSTRAP_IF_INITIALIZED: 'true',
     HOST: '127.0.0.1',
     PORT: String(ports.server),
