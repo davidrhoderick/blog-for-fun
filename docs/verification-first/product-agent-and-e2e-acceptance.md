@@ -11,7 +11,7 @@ After product accepts the feature, record its behavior as executable E2E tests.
 
 Verify the tests in a fresh environment. Preserve the tests as the functional contract for the engineering phase.
 
-**This process must prioritize functional delivery. Product changes do not run the trust pipeline before acceptance; the launcher does run a clean-baseline `pnpm verify` preflight before product work starts.** Launch it with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`, which prepares the managed worktree and then opens OpenCode with the `product-dev` agent as the default. The pipeline plugin skips the trust pipeline for that agent automatically. `OPENCODE_PRODUCT_MODE=1` remains an optional override.
+**This process must prioritize functional delivery. Product work does not run the trust pipeline before handoff; engineering runs it after acceptance.** Launch it with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`, which prepares the managed worktree and then opens OpenCode with the `product-dev` agent as the default. The pipeline plugin skips the trust pipeline for that agent automatically. `OPENCODE_PRODUCT_MODE=1` remains an optional override.
 
 ## 2. Scope
 
@@ -46,7 +46,7 @@ Do not introduce a new coding agent or test framework when an existing tool meet
 
 ### Initial setup
 
-1. Start product work with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`. The launcher creates an isolated worktree from fetched `origin/main`, installs frozen dependencies, runs baseline `pnpm verify`, and starts a local database plus the selected app. Stop and report baseline/setup failures to engineering. Use `--base-ref <ref>` only for explicitly requested stacking. While this tooling is unmerged, use `--base-ref HEAD` to test it.
+1. Start product work with `pnpm product:feature --id <FEATURE_ID> --app <admin|blog>`. The launcher creates an isolated worktree from fetched `origin/main`, installs frozen dependencies, and starts a local database plus the selected app without running `pnpm verify`. Stop and report setup failures to engineering. Use `--base-ref <ref>` only for explicitly requested stacking. While this tooling is unmerged, use `--base-ref HEAD` to test it.
 2. The launcher creates `apps/server/.env` only when absent and never overwrites it. It uses local-only database credentials and refuses non-local database or storage endpoints. Do not copy credentials from another environment.
 3. Configure the Playwright MCP server in `.opencode/opencode.json`:
 

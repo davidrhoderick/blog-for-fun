@@ -15,7 +15,7 @@
 - New product feature branches start from fetched `origin/main` by default; stacking requires an explicit base ref. `--resume` is required to reuse an existing managed worktree.
 - Validate IDs with the existing `^[A-Za-z0-9][A-Za-z0-9_-]*$` rule before using them in branch names, worktree paths, or database paths.
 - Never rebase the invoking branch, overwrite an existing `.env`, use a non-local database, or kill processes not started by the launcher.
-- Install with `pnpm install --frozen-lockfile`; run `VERIFY_BASE_REF=<base> pnpm verify` before product iteration and stop on failure.
+- Install with `pnpm install --frozen-lockfile`; do not run the trust pipeline before product handoff. Engineering runs `pnpm verify` after product acceptance.
 - Keep local credentials local; leave worktrees and persistent product databases available to resume.
 - Preserve accepted E2E tests; do not add accepted-file SHA comparisons or change product behavior without approval.
 - Record temporary tracked local overrides at handoff; engineering decides whether to make them durable or remove them and documents the disposition.
@@ -24,8 +24,8 @@
 ## Review Focus
 
 - Missing base or existing branch/worktree path → refuse safely without changing the invoking worktree (Task 3 integration test).
-- Resume with a mismatched branch/path or with `--base-ref` → refuse; a matching resume preserves dirty tracked/untracked changes and skips baseline verification (Task 3 integration test).
-- Resume without a success marker from a passing baseline, or with an ID/app/base mismatch → refuse so resume cannot bypass the initial verification gate (Task 3 integration test).
+- Resume with a mismatched branch/path or with `--base-ref` → refuse; a matching resume preserves dirty tracked/untracked changes (Task 3 integration test).
+- Resume without a setup marker, or with an ID/app/base mismatch → refuse so resume cannot reuse an unmanaged worktree (Task 3 integration test).
 - Existing non-local database or storage endpoint in `.env` → refuse rather than connect to it; inherited Turso/AWS credentials are stripped from managed children (Task 2 integration tests).
 - Resuming a local database with an existing administrator → do not bootstrap again or alter its credentials (Task 2 test).
 - Occupied app port or shutdown signal → report the collision and stop only owned child processes (Task 2 test).
@@ -100,22 +100,22 @@ Expected: PASS; an existing account remains unchanged, and children started by t
 **Interface:**
 - `pnpm product:feature --id <ID> --app <admin|blog> [--base-ref <ref>] [--resume]`.
 - Default base: fetched `origin/main`; explicit `--base-ref` is required to stack. Create branch `product/<ID>` in `.worktrees/<ID>` and print the chosen base SHA.
-- `--resume` cannot be combined with `--base-ref`; accept only branch `product/<ID>` registered at `.worktrees/<ID>` with a matching `apps/server/.local/product-<ID>.json` success marker. Preserve dirty files, reuse `apps/server/.local/product-<ID>.db`, rerun frozen dependency installation, and skip baseline verification.
+- `--resume` cannot be combined with `--base-ref`; accept only branch `product/<ID>` registered at `.worktrees/<ID>` with a matching `apps/server/.local/product-<ID>.json` setup marker. Preserve dirty files, reuse `apps/server/.local/product-<ID>.db`, and rerun frozen dependency installation.
 
-- [x] **Step 1: Add failing launcher integration tests** with a temporary Git repository and stub `pnpm`: assert default/base-ref branch creation, install-before-verify ordering, no product launch after failed verify, invalid ID/app and non-local `.env` refusal, collision refusal without `--resume`, exact branch/path and success-marker validation with `--resume`, preservation of dirty files, and skipped baseline verification on resume.
+- [x] **Step 1: Add failing launcher integration tests** with a temporary Git repository and stub `pnpm`: assert default/base-ref branch creation, frozen dependency install without invoking `pnpm verify`, invalid ID/app and non-local `.env` refusal, collision refusal without `--resume`, exact branch/path and setup-marker validation with `--resume`, and preservation of dirty files.
 - [x] **Step 2: Run the focused test and confirm it fails.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/product-launcher.test.ts`
 
 Expected: FAIL because the launcher and root script do not exist.
 
-- [x] **Step 3: Implement the standard-library launcher**: for a new feature, fetch and resolve the base; refuse existing branch/path; add ignored `.worktrees/`; create the worktree; install frozen dependencies; check `git status`; run `VERIFY_BASE_REF=<base-sha> pnpm verify`; check `git status` again and stop/report if verification fails or tracked/untracked changes appeared; only after success write `apps/server/.local/product-<ID>.json` with the feature ID, app, and base SHA. For `--resume`, require that matching marker and exact managed branch/path, preserve existing changes, rerun frozen dependency installation, and skip verification. Both paths validate/create a local `.env` without overwriting and refuse a non-file DB URL, then invoke `pnpm --filter trust-pipeline exec tsx feature/environment.ts run --app <app> --database <persistent-path> -- pnpm product` inside the worktree.
-- [x] **Step 4: Scope environment secrets to verification only.** Forward `JEV_API_KEY` from the invoking process or its `trust-pipeline/.env` to the verify child; never copy the full secret file or pass the key to the app/product-agent processes.
+- [x] **Step 3: Implement the standard-library launcher**: fetch and resolve the base; refuse existing branch/path; create the worktree; install frozen dependencies; verify the worktree remains clean; write `apps/server/.local/product-<ID>.json` with the feature ID, app, and base SHA as the setup marker. Do not run the trust pipeline before product handoff. For `--resume`, require the matching marker and exact managed branch/path, preserve existing changes, and rerun frozen dependency installation. Both paths validate/create a local `.env` without overwriting and refuse a non-file DB URL, then invoke the managed local environment and `pnpm product` inside the worktree.
+- [x] **Step 4: Keep engineering credentials out of product setup.** The launcher does not load or forward `JEV_API_KEY`; do not pass engineering review credentials to the app or product-agent processes.
 - [x] **Step 5: Run launcher tests.**
 
 Run: `pnpm --filter trust-pipeline exec vitest run feature/product-launcher.test.ts`
 
-Expected: PASS; base and collision cases leave the invoking checkout untouched, and a failed baseline never starts product work.
+Expected: PASS; base and collision cases leave the invoking checkout untouched, and product setup proceeds without running the trust pipeline.
 
 ### Task 4: Use managed environments for feature E2E and update handoff guidance
 
@@ -147,7 +147,7 @@ Run: `pnpm --filter trust-pipeline exec vitest run feature/cli.test.ts feature/m
 
 Expected: PASS for managed and explicit external-loopback paths.
 
-- [x] **Step 5: Replace setup instructions with the launcher command** and document the base policy, baseline verify gate, local migration/health readiness, and engineering-owned local-override handoff in the listed agent/docs files.
+- [x] **Step 5: Replace setup instructions with the launcher command** and document the base policy, product-phase pipeline deferral, local migration/health readiness, and engineering-owned local-override handoff in the listed agent/docs files.
 - [x] **Step 6: Run the full trust pipeline and inspect the accepted E2E diff.**
 
 Run: `pnpm verify` (default review base is `HEAD`, the Task 4 base for this uncommitted diff).

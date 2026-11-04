@@ -109,7 +109,7 @@ const readEvents = async (log: string) =>
     .split('\n')
     .map((line) => JSON.parse(line) as Record<string, unknown>)
 
-test('creates from fetched main and gates launch on baseline verification', {
+test('creates from fetched main without running baseline verification', {
   tags: ['integration'],
 }, async () => {
   const { repo, bin, log, baseSha } = await createRepo()
@@ -152,31 +152,20 @@ test('creates from fetched main and gates launch on baseline verification', {
   ).toEqual({ schemaVersion: 1, id: 'INS-123', app: 'blog', baseSha })
 
   const events = await readEvents(log)
-  expect(events.map((event) => event.kind)).toEqual([
-    'install',
-    'verify',
-    'environment',
-  ])
+  expect(events.map((event) => event.kind)).toEqual(['install', 'environment'])
   expect(events[0].key).toBeUndefined()
   expect(events[0].database).toBeUndefined()
   expect(events[0].token).toBeUndefined()
   expect(events[0].awsKey).toBeUndefined()
   expect(events[0].endpoint).toBeUndefined()
   expect(events[0].featureURL).toBeUndefined()
-  expect(events[1].base).toBe(baseSha)
-  expect(events[1].key).toBe('review-secret-from-file')
+  expect(events[1].key).toBeUndefined()
   expect(events[1].database).toBeUndefined()
   expect(events[1].token).toBeUndefined()
   expect(events[1].awsKey).toBeUndefined()
   expect(events[1].endpoint).toBeUndefined()
   expect(events[1].featureURL).toBeUndefined()
-  expect(events[2].key).toBeUndefined()
-  expect(events[2].database).toBeUndefined()
-  expect(events[2].token).toBeUndefined()
-  expect(events[2].awsKey).toBeUndefined()
-  expect(events[2].endpoint).toBeUndefined()
-  expect(events[2].featureURL).toBeUndefined()
-  const environmentArgs = events[2].args as string[]
+  const environmentArgs = events[1].args as string[]
   expect(environmentArgs.slice(-2)).toEqual(['pnpm', 'product'])
   expect(environmentArgs).toContain('blog')
   expect(
@@ -204,10 +193,13 @@ test('uses the explicit stacking base without rebasing the source branch', {
   expect(result.status).toBe(0)
   expect(git(repo, ['rev-parse', 'product/INS-124'])).toBe(baseSha)
   expect(git(repo, ['rev-parse', 'HEAD'])).toBe(sourceHead)
-  expect((await readEvents(log))[1].base).toBe(baseSha)
+  expect((await readEvents(log)).map((event) => event.kind)).toEqual([
+    'install',
+    'environment',
+  ])
 })
 
-test('does not launch product work after baseline verification fails', {
+test('does not invoke verification during setup even when it would fail', {
   tags: ['integration'],
 }, async () => {
   const { repo, bin, log } = await createRepo()
@@ -219,24 +211,10 @@ test('does not launch product work after baseline verification fails', {
     { FAIL_VERIFY: '1' },
   )
 
-  expect(result.status).not.toBe(0)
+  expect(result.status).toBe(0)
   expect((await readEvents(log)).map((event) => event.kind)).toEqual([
     'install',
-    'verify',
-  ])
-  expect(git(repo, ['rev-parse', 'product/INS-125'])).not.toBe('')
-  expect(
-    runLauncher(repo, bin, log, [
-      '--id',
-      'INS-125',
-      '--app',
-      'blog',
-      '--resume',
-    ]).status,
-  ).not.toBe(0)
-  expect((await readEvents(log)).map((event) => event.kind)).toEqual([
-    'install',
-    'verify',
+    'environment',
   ])
 })
 

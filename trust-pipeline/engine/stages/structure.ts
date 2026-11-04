@@ -14,7 +14,14 @@ import type { Stage } from './types'
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/
 const TEST_FILE = /\.test\.(?:[cm]?[jt]sx?)$/
 // Build artifacts and dependencies are never source.
-const SKIP_DIRS = new Set(['node_modules', '.git', 'coverage', 'build', 'dist'])
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  '.worktrees',
+  'coverage',
+  'build',
+  'dist',
+])
 
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -24,13 +24,13 @@ repository root run:
 pnpm product:feature --id BLOG-123 --app blog --base-ref HEAD
 ```
 
-The launcher creates `.worktrees/BLOG-123` on `product/BLOG-123`, installs
-frozen dependencies, and runs baseline `pnpm verify` before starting product
-work. It then creates a local file DB, migrates it, bootstraps a local admin if
-needed, starts the server and blog app, checks health, and launches
-`product-dev`. It preserves existing `.env` files, rejects remote database or
-storage endpoints, and never kills unrelated processes. If verification fails
-or `JEV_API_KEY` is missing, stop and report the setup failure to engineering.
+The launcher creates `.worktrees/BLOG-123` on `product/BLOG-123` and installs
+frozen dependencies. It does not run `pnpm verify`; engineering runs the trust
+pipeline after handoff. The launcher creates a local file DB, migrates it,
+bootstraps a local admin if needed, starts the server and blog app, checks
+health, and launches `product-dev`. It preserves existing `.env` files, rejects
+remote database or storage endpoints, and never kills unrelated processes.
+Setup failures should be reported to engineering.
 
 After Ctrl-C, resume explicitly without resetting product changes:
 

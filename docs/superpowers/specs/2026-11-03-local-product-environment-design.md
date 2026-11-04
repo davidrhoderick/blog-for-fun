@@ -1,6 +1,7 @@
 # Local Product Environment Design
 
-**Status:** Proposed; implementation waits for product-owner review.
+**Status:** Approved. On 2026-11-04, the product owner deferred the trust
+pipeline until engineering handoff.
 
 ## Problem
 
@@ -53,12 +54,11 @@ already exists or the requested base cannot be resolved. `--resume` is explicit:
 it accepts only the `product/<id>` branch registered at the exact
 `.worktrees/<id>` path, reuses its local database, and preserves all tracked and
 untracked changes. Resume cannot be combined with `--base-ref`; it does not
-fetch, rebase, reset, or rerun baseline verification against a branch that may
-contain product edits. It reruns `pnpm install --frozen-lockfile` to match the
-worktree's current lockfile. It also requires a local success marker written
-only after the initial baseline verification passes; the marker must match the
-feature ID, app, and verified base SHA. Missing, malformed, or mismatched
-markers refuse resume.
+fetch, rebase, or reset a branch that may contain product edits. It reruns
+`pnpm install --frozen-lockfile` to match the worktree's current lockfile. It
+also requires a local setup marker written after dependency installation and a
+clean-worktree check; the marker must match the feature ID, app, and selected
+base SHA. Missing, malformed, or mismatched markers refuse resume.
 
 The launcher never rebases or modifies the invoking worktree. It never
 force-removes a worktree, deletes product data, or kills a process it did not
@@ -67,18 +67,15 @@ worktree and local database for resuming work.
 
 ## Environment behavior
 
-- In order: create the worktree, run `pnpm install --frozen-lockfile`, run
-  `VERIFY_BASE_REF=<selected-base> pnpm verify`, provision and migrate the local
-  database, start the server and selected UI, verify readiness, then launch the
-  product agent. If baseline verification fails, stop before product work and
-  report the failure to engineering; product should not have to diagnose it.
+- In order: create the worktree, run `pnpm install --frozen-lockfile`, confirm
+  the new worktree remains clean, provision and migrate the local database,
+  start the server and selected UI, verify readiness, then launch the product
+  agent. Do not run the trust pipeline before product handoff; engineering runs
+  it after acceptance.
 - On `--resume`, validate the exact managed branch/path, preserve the worktree,
-  rerun frozen dependency installation, and skip baseline verification; then
-  migrate/reuse the persistent local DB and run app health checks.
-- Check `git status` before and after baseline verification. Never clean or reset
-  generated/user changes automatically. If verification requires the pipeline's
-  `JEV_API_KEY` and it is unavailable, report that as an engineering setup
-  prerequisite rather than asking product to troubleshoot it.
+  rerun frozen dependency installation, then migrate/reuse the persistent local
+  DB and run app health checks. Never clean or reset generated/user changes
+  automatically.
 - Create `apps/server/.env` in the new worktree only when absent. Use a local
   file-backed database and local-only credentials; never copy or overwrite the
   user's existing environment. Refuse any setup that would target a non-local
@@ -93,8 +90,9 @@ worktree and local database for resuming work.
   `apps/server/.local/product-<id>.db`; this directory is already ignored.
   Managed E2E uses and removes a separate temporary directory under the OS temp
   directory.
-- Write the resume marker at `apps/server/.local/product-<id>.json` only after
-  baseline verification succeeds. It is local state and is never committed.
+- Write the setup marker at `apps/server/.local/product-<id>.json` only after
+  frozen dependency installation and the clean-worktree check. It is local state
+  and is never committed.
 - Use the existing local-only bootstrap defaults (`dev@example.com`,
   `Dev Admin`, `dev-only`) for the local file database. Keep these credentials
   out of remote environments and source-controlled files.
@@ -142,9 +140,9 @@ silently inferred by the launcher.
 ## Acceptance checks
 
 1. From a fresh checkout, the launcher fetches `origin/main`, creates
-   `product/<id>` in `.worktrees/<id>`, installs dependencies, and runs baseline
-   verification before product changes. It does not edit the invoking worktree
-   or require the user to configure `.env`.
+   `product/<id>` in `.worktrees/<id>`, installs dependencies, and starts product
+   setup without running the trust pipeline. It does not edit the invoking
+   worktree or require the user to configure `.env`.
 2. Migrations run against that local database; bootstrap credentials are
    local-only and bootstrap runs once for each fresh database.
 3. The server and selected app start only after migrations. Health checks pass
@@ -153,7 +151,7 @@ silently inferred by the launcher.
    rewriting user state.
 4. A fresh invocation that collides with an existing branch/path fails without
    changing it. `--resume` accepts only the matching managed branch/path,
-   requires a matching success marker, preserves all changes, reuses its
+   requires a matching setup marker, preserves all changes, reuses its
    database, and does not change existing administrator credentials. Ctrl-C
    stops only launcher-owned processes and leaves the worktree/database
    available.
@@ -161,7 +159,8 @@ silently inferred by the launcher.
    the manifest app and a disposable migrated database; an explicit loopback
    URL continues to work.
 6. Existing tests pass, new setup behavior has focused tests, accepted E2E
-   files are unchanged, and `pnpm verify` passes.
+   files are unchanged, and engineering verification of this tooling passes
+   with `pnpm verify`.
 7. Every temporary tracked override is listed at handoff and has an explicit
    engineering disposition in the eventual PR/comments.
 

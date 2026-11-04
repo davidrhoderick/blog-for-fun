@@ -12,7 +12,7 @@ Repository shape:
 - Admin UI: `apps/admin` (port 3001)
 - Public blog: `apps/blog` (port 3000)
 
-The product launcher creates an isolated worktree from fetched `origin/main`, installs dependencies, runs the baseline `pnpm verify` gate, provisions a local database, starts the server and selected app, then launches this agent. Stop and report baseline/setup failures to engineering; do not diagnose pipeline failures as product work:
+The product launcher creates an isolated worktree from fetched `origin/main`, installs dependencies, provisions a local database, starts the server and selected app, then launches this agent. It does not run `pnpm verify`; engineering runs the trust pipeline after product handoff. Stop and report setup failures to engineering:
 
 ```sh
 pnpm product:feature --id <FEATURE_ID> --app <admin|blog>

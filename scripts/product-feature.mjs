@@ -170,17 +170,6 @@ function assertClean(root) {
   if (status) throw new Error(`Baseline worktree is not clean:\n${status}`)
 }
 
-function verificationEnvironment(root, safeEnv, baseSha) {
-  const key =
-    process.env.JEV_API_KEY ??
-    readEnvFileValue(path.join(root, 'trust-pipeline/.env'), 'JEV_API_KEY')
-  return {
-    ...safeEnv,
-    VERIFY_BASE_REF: baseSha,
-    ...(key ? { JEV_API_KEY: key } : {}),
-  }
-}
-
 function localProcessEnvironment(source = process.env) {
   const env = { ...source }
   for (const name of Object.keys(env)) {
@@ -240,9 +229,9 @@ function resumeWorktree(root, target, branch, id, app) {
   )
   if (baseIsAncestor.status !== 0)
     throw new Error(
-      'Cannot resume: verified base is not an ancestor of the branch',
+      'Cannot resume: setup base is not an ancestor of the branch',
     )
-  console.info(`Resuming ${branch}; verified base ${marker.baseSha}`)
+  console.info(`Resuming ${branch}; base ${marker.baseSha}`)
 }
 
 async function writeResumeMarker(target, id, app, baseSha) {
@@ -277,13 +266,6 @@ async function main() {
     await validateLocalEnv(target)
 
     run('pnpm', ['install', '--frozen-lockfile'], target, safeEnv)
-    assertClean(target)
-    run(
-      'pnpm',
-      ['verify'],
-      target,
-      verificationEnvironment(root, safeEnv, baseSha),
-    )
     assertClean(target)
     await writeResumeMarker(target, options.id, options.app, baseSha)
   }
